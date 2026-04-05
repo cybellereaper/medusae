@@ -50,6 +50,14 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerAutocompleteHandler(commandName, listener);
     }
 
+    public void onUserContextMenu(String commandName, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerUserContextMenuHandler(commandName, listener);
+    }
+
+    public void onMessageContextMenu(String commandName, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerMessageContextMenuHandler(commandName, listener);
+    }
+
     public void onComponentInteraction(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerComponentHandler(customId, listener);
     }
@@ -67,6 +75,14 @@ public final class DiscordClient implements AutoCloseable {
         return restClient.createGlobalApplicationCommand(resolveApplicationId(), command);
     }
 
+    public JsonNode registerGlobalUserContextMenu(String commandName) {
+        return registerGlobalSlashCommand(SlashCommandDefinition.userContextMenu(commandName));
+    }
+
+    public JsonNode registerGlobalMessageContextMenu(String commandName) {
+        return registerGlobalSlashCommand(SlashCommandDefinition.messageContextMenu(commandName));
+    }
+
     public void registerGlobalSlashCommands(List<SlashCommandDefinition> commands) {
         registerCommands(commands, this::registerGlobalSlashCommand);
     }
@@ -80,6 +96,14 @@ public final class DiscordClient implements AutoCloseable {
         Objects.requireNonNull(command, "command");
 
         return restClient.createGuildApplicationCommand(resolveApplicationId(), guildId, command);
+    }
+
+    public JsonNode registerGuildUserContextMenu(String guildId, String commandName) {
+        return registerGuildSlashCommand(guildId, SlashCommandDefinition.userContextMenu(commandName));
+    }
+
+    public JsonNode registerGuildMessageContextMenu(String guildId, String commandName) {
+        return registerGuildSlashCommand(guildId, SlashCommandDefinition.messageContextMenu(commandName));
     }
 
     public void registerGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {

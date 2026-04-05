@@ -11,6 +11,10 @@ import java.util.function.Consumer;
 final class SlashCommandRouter {
     private static final int PING_INTERACTION_TYPE = 1;
     private static final int APPLICATION_COMMAND_INTERACTION_TYPE = 2;
+
+    private static final int CHAT_INPUT_COMMAND_TYPE = 1;
+    private static final int USER_CONTEXT_COMMAND_TYPE = 2;
+    private static final int MESSAGE_CONTEXT_COMMAND_TYPE = 3;
     private static final int MESSAGE_COMPONENT_INTERACTION_TYPE = 3;
     private static final int APPLICATION_COMMAND_AUTOCOMPLETE_INTERACTION_TYPE = 4;
     private static final int MODAL_SUBMIT_INTERACTION_TYPE = 5;
@@ -22,6 +26,8 @@ final class SlashCommandRouter {
     private static final int AUTOCOMPLETE_RESPONSE_TYPE = 8;
 
     private final Map<String, Consumer<JsonNode>> slashHandlers = new ConcurrentHashMap<>();
+    private final Map<String, Consumer<JsonNode>> userContextMenuHandlers = new ConcurrentHashMap<>();
+    private final Map<String, Consumer<JsonNode>> messageContextMenuHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<JsonNode>> componentHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<JsonNode>> modalHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<JsonNode>> autocompleteHandlers = new ConcurrentHashMap<>();
@@ -47,6 +53,14 @@ final class SlashCommandRouter {
         registerUniqueHandler(autocompleteHandlers, commandName, "autocomplete", handler);
     }
 
+    void registerUserContextMenuHandler(String commandName, Consumer<JsonNode> handler) {
+        registerUniqueHandler(userContextMenuHandlers, commandName, "user context menu", handler);
+    }
+
+    void registerMessageContextMenuHandler(String commandName, Consumer<JsonNode> handler) {
+        registerUniqueHandler(messageContextMenuHandlers, commandName, "message context menu", handler);
+    }
+
     void handleInteraction(JsonNode interaction) {
         if (interaction == null) {
             return;
@@ -59,7 +73,14 @@ final class SlashCommandRouter {
         }
 
         if (interactionType == APPLICATION_COMMAND_INTERACTION_TYPE) {
-            dispatchByName(interaction, slashHandlers, "name");
+            int commandType = interaction.path("data").path("type").asInt(CHAT_INPUT_COMMAND_TYPE);
+            if (commandType == USER_CONTEXT_COMMAND_TYPE) {
+                dispatchByName(interaction, userContextMenuHandlers, "name");
+            } else if (commandType == MESSAGE_CONTEXT_COMMAND_TYPE) {
+                dispatchByName(interaction, messageContextMenuHandlers, "name");
+            } else {
+                dispatchByName(interaction, slashHandlers, "name");
+            }
             return;
         }
 

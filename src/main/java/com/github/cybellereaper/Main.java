@@ -1,8 +1,13 @@
 import com.github.cybellereaper.client.AutocompleteChoice;
+import com.github.cybellereaper.client.DiscordActionRow;
+import com.github.cybellereaper.client.DiscordButton;
 import com.github.cybellereaper.client.DiscordClient;
 import com.github.cybellereaper.client.DiscordClientConfig;
 import com.github.cybellereaper.client.DiscordEmbed;
 import com.github.cybellereaper.client.DiscordMessage;
+import com.github.cybellereaper.client.DiscordPermissions;
+import com.github.cybellereaper.client.DiscordSelectOption;
+import com.github.cybellereaper.client.DiscordStringSelectMenu;
 import com.github.cybellereaper.client.SlashCommandDefinition;
 import com.github.cybellereaper.client.SlashCommandOptionDefinition;
 import com.github.cybellereaper.gateway.GatewayIntent;
@@ -23,12 +28,18 @@ void main() throws Exception {
 
     try (DiscordClient client = DiscordClient.create(config)) {
         List<SlashCommandDefinition> commands = List.of(
-                SlashCommandDefinition.simple("ping", "Reply with pong"),
+                SlashCommandDefinition.simple("ping", "Reply with pong")
+                        .withDefaultMemberPermissions(DiscordPermissions.of(
+                                DiscordPermissions.SEND_MESSAGES,
+                                DiscordPermissions.USE_APPLICATION_COMMANDS
+                        )),
                 new SlashCommandDefinition(
                         "echo",
                         "Echo input text back",
                         List.of(SlashCommandOptionDefinition.autocompletedString("text", "Text to echo", true))
-                )
+                ),
+                SlashCommandDefinition.userContextMenu("Inspect User"),
+                SlashCommandDefinition.messageContextMenu("Quote Message")
         );
 
         if (guildId == null || guildId.isBlank()) {
@@ -42,18 +53,37 @@ void main() throws Exception {
             String channelId = message.path("channel_id").asText();
 
             if ("!ping".equals(content)) {
+                DiscordActionRow buttons = DiscordActionRow.of(List.of(
+                        DiscordButton.primary("confirm_button", "Confirm").withEmoji("✅"),
+                        DiscordButton.link("https://discord.com/developers/docs/interactions", "Docs")
+                ));
+
                 client.sendMessage(channelId, DiscordMessage.ofEmbeds("pong", List.of(
-                        new DiscordEmbed("Legacy Ping", "Handled via message command", 0x57F287)
-                                .withImage("https://images.unsplash.com/photo-1516117172878-fd2c41f4a759")
-                )));
+                                new DiscordEmbed("Legacy Ping", "Handled via message command", 0x57F287)
+                                        .withImage("https://images.unsplash.com/photo-1516117172878-fd2c41f4a759")
+                        ))
+                        .withComponents(List.of(buttons)));
             }
         });
 
-        client.onSlashCommand("ping", interaction -> client.respondWithMessage(interaction,
-                DiscordMessage.ofEmbeds("pong", List.of(
-                        new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
-                                .withThumbnail("https://cdn.discordapp.com/embed/avatars/0.png")
-                ))));
+        client.onSlashCommand("ping", interaction -> {
+            DiscordActionRow selectMenuRow = DiscordActionRow.of(List.of(
+                    DiscordStringSelectMenu.of("theme_select", List.of(
+                                    DiscordSelectOption.of("Light", "light"),
+                                    DiscordSelectOption.of("Dark", "dark").asDefault(),
+                                    DiscordSelectOption.of("System", "system")
+                            ))
+                            .withPlaceholder("Choose a theme")
+                            .withSelectionRange(1, 1)
+            ));
+
+            client.respondWithMessage(interaction,
+                    DiscordMessage.ofEmbeds("pong", List.of(
+                                    new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
+                                            .withThumbnail("https://cdn.discordapp.com/embed/avatars/0.png")
+                            ))
+                            .withComponents(List.of(selectMenuRow)));
+        });
 
         client.onSlashCommand("echo", interaction -> {
             String text = client.getStringOption(interaction, "text");
@@ -80,7 +110,18 @@ void main() throws Exception {
             client.respondWithAutocompleteChoices(interaction, choices);
         });
 
-        client.onComponentInteraction("confirm_button", client::deferUpdate);
+        client.onUserContextMenu("Inspect User", interaction ->
+                client.respondEphemeral(interaction, "User inspection invoked."));
+
+        client.onMessageContextMenu("Quote Message", interaction ->
+                client.respondEphemeral(interaction, "Message quote command invoked."));
+
+        client.onComponentInteraction("confirm_button", interaction ->
+                client.respondEphemeral(interaction, "Confirmed!"));
+
+        client.onComponentInteraction("theme_select", interaction ->
+                client.respondEphemeral(interaction, "Theme updated."));
+
         client.onModalSubmit("feedback_modal", interaction ->
                 client.respondEphemeralWithEmbeds(interaction, "Thanks for the feedback!", List.of(
                         new DiscordEmbed("Feedback", "Received successfully", 0x57F287)
