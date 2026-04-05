@@ -53,9 +53,9 @@ void main() throws Exception {
         );
 
         if (guildId == null || guildId.isBlank()) {
-            client.registerGlobalSlashCommands(commands);
+            client.syncGlobalSlashCommands(commands);
         } else {
-            client.registerGuildSlashCommands(guildId, commands);
+            client.syncGuildSlashCommands(guildId, commands);
         }
 
         client.on("READY", ReadyEvent.class, ready ->

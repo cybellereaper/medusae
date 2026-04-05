@@ -471,26 +471,35 @@ class SlashCommandRouterTest {
     }
 
     @Test
-    void rejectsDuplicatePrefixHandlerRegistration() {
+    void duplicatePrefixHandlerRegistrationOverridesPreviousHandler() throws Exception {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });
+        AtomicInteger firstCount = new AtomicInteger(0);
+        AtomicInteger secondCount = new AtomicInteger(0);
 
-        router.registerModalPrefixHandler("feedback:", ignored -> {
-        });
+        router.registerModalPrefixHandler("feedback:", ignored -> firstCount.incrementAndGet());
+        router.registerModalPrefixHandler("feedback:", ignored -> secondCount.incrementAndGet());
 
-        assertThrows(IllegalArgumentException.class, () -> router.registerModalPrefixHandler("feedback:", ignored -> {
-        }));
+        router.handleInteraction(interactionPayload(5, null, "feedback:updated", "1", "token", null, null));
+
+        assertEquals(0, firstCount.get());
+        assertEquals(1, secondCount.get());
     }
 
     @Test
-    void rejectsDuplicateHandlerRegistration() {
+    void duplicateHandlerRegistrationOverridesPreviousHandler() throws Exception {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });
-        router.registerSlashHandler("ping", ignored -> {
-        });
+        AtomicInteger firstCount = new AtomicInteger(0);
+        AtomicInteger secondCount = new AtomicInteger(0);
 
-        assertThrows(IllegalArgumentException.class, () -> router.registerSlashHandler("ping", ignored -> {
-        }));
+        router.registerSlashHandler("ping", ignored -> firstCount.incrementAndGet());
+        router.registerSlashHandler("ping", ignored -> secondCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(2, "ping", null, "1", "token", null, 1));
+
+        assertEquals(0, firstCount.get());
+        assertEquals(1, secondCount.get());
     }
 
     @Test

@@ -388,11 +388,7 @@ final class SlashCommandRouter {
     ) {
         validateKey(key, handlerType);
         Objects.requireNonNull(handler, "handler");
-
-        H previous = handlers.putIfAbsent(key, handler);
-        if (previous != null) {
-            throw new IllegalArgumentException("Interaction handler already registered for " + handlerType + ": " + key);
-        }
+        handlers.put(key, handler);
     }
 
     private static <H> void registerPrefixHandler(
@@ -403,14 +399,8 @@ final class SlashCommandRouter {
     ) {
         validateKey(prefix, handlerType + " prefix");
         Objects.requireNonNull(handler, "handler");
-
-        PrefixHandler<H> prefixHandler = new PrefixHandler<>(prefix, handler);
-        boolean duplicate = handlers.stream().anyMatch(existing -> existing.prefix().equals(prefix));
-        if (duplicate) {
-            throw new IllegalArgumentException("Interaction prefix handler already registered for " + handlerType + ": " + prefix);
-        }
-
-        handlers.add(prefixHandler);
+        handlers.removeIf(existing -> existing.prefix().equals(prefix));
+        handlers.add(new PrefixHandler<>(prefix, handler));
     }
 
     private static void validateKey(String key, String keyType) {
