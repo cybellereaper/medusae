@@ -10,7 +10,9 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,6 +82,41 @@ public final class DiscordRestClient {
         return request("POST", "/applications/" + applicationId + "/commands", command.toRequestPayload());
     }
 
+    public JsonNode getGlobalApplicationCommands(String applicationId) {
+        requireNonBlank(applicationId, "applicationId");
+        return request("GET", "/applications/" + applicationId + "/commands", null);
+    }
+
+    public JsonNode getGuildApplicationCommands(String applicationId, String guildId) {
+        requireNonBlank(applicationId, "applicationId");
+        requireNonBlank(guildId, "guildId");
+        return request("GET", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", null);
+    }
+
+    public JsonNode deleteGlobalApplicationCommand(String applicationId, String commandId) {
+        requireNonBlank(applicationId, "applicationId");
+        requireNonBlank(commandId, "commandId");
+        return request("DELETE", "/applications/" + applicationId + "/commands/" + commandId, null);
+    }
+
+    public JsonNode deleteGuildApplicationCommand(String applicationId, String guildId, String commandId) {
+        requireNonBlank(applicationId, "applicationId");
+        requireNonBlank(guildId, "guildId");
+        requireNonBlank(commandId, "commandId");
+        return request("DELETE", "/applications/" + applicationId + "/guilds/" + guildId + "/commands/" + commandId, null);
+    }
+
+    public JsonNode bulkOverwriteGlobalApplicationCommands(String applicationId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(applicationId, "applicationId");
+        return request("PUT", "/applications/" + applicationId + "/commands", toCommandPayloads(commands));
+    }
+
+    public JsonNode bulkOverwriteGuildApplicationCommands(String applicationId, String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(applicationId, "applicationId");
+        requireNonBlank(guildId, "guildId");
+        return request("PUT", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", toCommandPayloads(commands));
+    }
+
     public JsonNode request(String method, String path, Object body) {
         String routeKey = method + " " + path;
         String bucketId = routeToBucket.getOrDefault(routeKey, routeKey);
@@ -128,6 +165,18 @@ public final class DiscordRestClient {
         if (value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
         }
+    }
+
+    private static List<Map<String, Object>> toCommandPayloads(List<SlashCommandDefinition> commands) {
+        Objects.requireNonNull(commands, "commands");
+
+        List<Map<String, Object>> payloads = new ArrayList<>(commands.size());
+        for (SlashCommandDefinition command : commands) {
+            Objects.requireNonNull(command, "commands must not contain null entries");
+            payloads.add(command.toRequestPayload());
+        }
+
+        return payloads;
     }
 
     private HttpRequest buildRequest(String method, String path, Object body) {
