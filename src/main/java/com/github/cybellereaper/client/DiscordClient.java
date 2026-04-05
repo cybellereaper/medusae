@@ -6,15 +6,24 @@ import com.github.cybellereaper.gateway.DiscordGatewayClient;
 import com.github.cybellereaper.http.DiscordRestClient;
 
 import java.net.http.HttpClient;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class DiscordClient implements AutoCloseable {
     private final DiscordRestClient restClient;
     private final DiscordGatewayClient gatewayClient;
+    private final SlashCommandRouter slashCommandRouter;
+
+    private volatile String applicationId;
 
     private DiscordClient(DiscordRestClient restClient, DiscordGatewayClient gatewayClient) {
         this.restClient = restClient;
         this.gatewayClient = gatewayClient;
+        this.slashCommandRouter = new SlashCommandRouter(restClient::createInteractionResponse);
+        this.gatewayClient.on("INTERACTION_CREATE", slashCommandRouter::handleInteraction);
     }
 
     public static DiscordClient create(DiscordClientConfig config) {
@@ -35,12 +44,131 @@ public final class DiscordClient implements AutoCloseable {
         gatewayClient.on(eventType, listener);
     }
 
+    public void onSlashCommand(String commandName, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerSlashHandler(commandName, listener);
+    }
+
+    public void onAutocomplete(String commandName, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerAutocompleteHandler(commandName, listener);
+    }
+
+    public void onComponentInteraction(String customId, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerComponentHandler(customId, listener);
+    }
+
+    public void onModalSubmit(String customId, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerModalHandler(customId, listener);
+    }
+
+    public JsonNode registerGlobalSlashCommand(String commandName, String description) {
+        return registerGlobalSlashCommand(SlashCommandDefinition.simple(commandName, description));
+    }
+
+    public JsonNode registerGlobalSlashCommand(SlashCommandDefinition command) {
+        Objects.requireNonNull(command, "command");
+        return restClient.createGlobalApplicationCommand(resolveApplicationId(), command);
+    }
+
+    public void registerGlobalSlashCommands(List<SlashCommandDefinition> commands) {
+        registerCommands(commands, this::registerGlobalSlashCommand);
+    }
+
+    public JsonNode registerGuildSlashCommand(String guildId, String commandName, String description) {
+        return registerGuildSlashCommand(guildId, SlashCommandDefinition.simple(commandName, description));
+    }
+
+    public JsonNode registerGuildSlashCommand(String guildId, SlashCommandDefinition command) {
+        requireNonBlank(guildId, "guildId");
+        Objects.requireNonNull(command, "command");
+
+        return restClient.createGuildApplicationCommand(resolveApplicationId(), guildId, command);
+    }
+
+    public void registerGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(guildId, "guildId");
+        registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
+    }
+
+    public void respondWithMessage(JsonNode interaction, String content) {
+        slashCommandRouter.respondWithMessage(interaction, content);
+    }
+
+    public void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+        slashCommandRouter.respondWithEmbeds(interaction, content, embeds);
+    }
+
+    public void respondEphemeral(JsonNode interaction, String content) {
+        slashCommandRouter.respondEphemeral(interaction, content);
+    }
+
+    public void respondEphemeralWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+        slashCommandRouter.respondEphemeralWithEmbeds(interaction, content, embeds);
+    }
+
+    public void respondWithAutocompleteChoices(JsonNode interaction, List<AutocompleteChoice> choices) {
+        slashCommandRouter.respondWithAutocompleteChoices(interaction, choices);
+    }
+
+    public void deferMessage(JsonNode interaction) {
+        slashCommandRouter.deferMessage(interaction);
+    }
+
+    public void deferUpdate(JsonNode interaction) {
+        slashCommandRouter.deferUpdate(interaction);
+    }
+
+    public String getStringOption(JsonNode interaction, String optionName) {
+        return slashCommandRouter.getOptionString(interaction, optionName);
+    }
+
     public void sendMessage(String channelId, String content) {
-        restClient.sendMessage(channelId, content);
+        restClient.sendMessage(channelId, Map.of("content", content));
+    }
+
+    public void sendMessageWithEmbeds(String channelId, String content, List<DiscordEmbed> embeds) {
+        requireNonBlank(channelId, "channelId");
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (content != null && !content.isBlank()) {
+            payload.put("content", content);
+        }
+        if (embeds != null && !embeds.isEmpty()) {
+            payload.put("embeds", embeds.stream().map(DiscordEmbed::toPayload).toList());
+        }
+
+        restClient.sendMessage(channelId, payload);
     }
 
     @Override
     public void close() {
         gatewayClient.close();
+    }
+
+    private void registerCommands(List<SlashCommandDefinition> commands, Consumer<SlashCommandDefinition> registrar) {
+        Objects.requireNonNull(commands, "commands");
+        for (SlashCommandDefinition command : commands) {
+            registrar.accept(command);
+        }
+    }
+
+    private String resolveApplicationId() {
+        String current = applicationId;
+        if (current != null && !current.isBlank()) {
+            return current;
+        }
+
+        synchronized (this) {
+            if (applicationId == null || applicationId.isBlank()) {
+                applicationId = restClient.getCurrentApplicationId();
+            }
+            return applicationId;
+        }
+    }
+
+    private static void requireNonBlank(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName);
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
     }
 }

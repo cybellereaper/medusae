@@ -3,13 +3,16 @@ package com.github.cybellereaper.http;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.client.DiscordClientConfig;
+import com.github.cybellereaper.client.SlashCommandDefinition;
 import com.github.cybellereaper.gateway.GatewayBotInfo;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DiscordRestClient {
@@ -41,8 +44,40 @@ public final class DiscordRestClient {
         );
     }
 
-    public JsonNode sendMessage(String channelId, String content) {
-        return request("POST", "/channels/" + channelId + "/messages", Map.of("content", content));
+    public JsonNode getCurrentApplication() {
+        return request("GET", "/oauth2/applications/@me", null);
+    }
+
+    public String getCurrentApplicationId() {
+        return getCurrentApplication().path("id").asText();
+    }
+
+    public JsonNode sendMessage(String channelId, Map<String, Object> payload) {
+        requireNonBlank(channelId, "channelId");
+        Objects.requireNonNull(payload, "payload");
+        return request("POST", "/channels/" + channelId + "/messages", payload);
+    }
+
+    public JsonNode createGlobalApplicationCommand(String applicationId, SlashCommandDefinition command) {
+        validateCommandContext(applicationId, command);
+        return request("POST", "/applications/" + applicationId + "/commands", command.toRequestPayload());
+    }
+
+    public JsonNode createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
+        validateCommandContext(applicationId, command);
+        requireNonBlank(guildId, "guildId");
+
+        return request("POST", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", command.toRequestPayload());
+    }
+
+    public JsonNode createInteractionResponse(String interactionId, String interactionToken, int type, Map<String, Object> data) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", type);
+        if (data != null && !data.isEmpty()) {
+            payload.put("data", data);
+        }
+
+        return request("POST", "/interactions/" + interactionId + "/" + interactionToken + "/callback", payload);
     }
 
     public JsonNode request(String method, String path, Object body) {
@@ -80,6 +115,18 @@ public final class DiscordRestClient {
             }
 
             return readJson(response.body());
+        }
+    }
+
+    private static void validateCommandContext(String applicationId, SlashCommandDefinition command) {
+        requireNonBlank(applicationId, "applicationId");
+        Objects.requireNonNull(command, "command");
+    }
+
+    private static void requireNonBlank(String value, String name) {
+        Objects.requireNonNull(value, name);
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
         }
     }
 

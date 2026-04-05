@@ -1,23 +1,83 @@
+import com.github.cybellereaper.client.AutocompleteChoice;
 import com.github.cybellereaper.client.DiscordClient;
 import com.github.cybellereaper.client.DiscordClientConfig;
+import com.github.cybellereaper.client.DiscordEmbed;
+import com.github.cybellereaper.client.SlashCommandDefinition;
+import com.github.cybellereaper.client.SlashCommandOptionDefinition;
 import com.github.cybellereaper.gateway.GatewayIntent;
+
+import java.util.List;
 
 void main() throws Exception {
     String token = System.getenv("DISCORD_BOT_TOKEN");
+    String guildId = System.getenv("DISCORD_GUILD_ID");
 
     DiscordClientConfig config = DiscordClientConfig.builder(token)
-            .intents(GatewayIntent.combine(GatewayIntent.GUILDS, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
+            .intents(GatewayIntent.combine(
+                    GatewayIntent.GUILDS,
+                    GatewayIntent.MESSAGE_CONTENT,
+                    GatewayIntent.GUILD_MESSAGES
+            ))
             .build();
 
     try (DiscordClient client = DiscordClient.create(config)) {
+        List<SlashCommandDefinition> commands = List.of(
+                SlashCommandDefinition.simple("ping", "Reply with pong"),
+                new SlashCommandDefinition(
+                        "echo",
+                        "Echo input text back",
+                        List.of(SlashCommandOptionDefinition.autocompletedString("text", "Text to echo", true))
+                )
+        );
+
+        if (guildId == null || guildId.isBlank()) {
+            client.registerGlobalSlashCommands(commands);
+        } else {
+            client.registerGuildSlashCommands(guildId, commands);
+        }
+
         client.on("MESSAGE_CREATE", message -> {
             String content = message.path("content").asText("");
             String channelId = message.path("channel_id").asText();
 
             if ("!ping".equals(content)) {
-                client.sendMessage(channelId, "pong");
+                client.sendMessageWithEmbeds(channelId, "pong", List.of(
+                        new DiscordEmbed("Legacy Ping", "Handled via message command", 0x57F287)
+                ));
             }
         });
+
+        client.onSlashCommand("ping", interaction -> client.respondWithEmbeds(interaction, "pong", List.of(
+                new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
+        )));
+
+        client.onSlashCommand("echo", interaction -> {
+            String text = client.getStringOption(interaction, "text");
+            if (text == null || text.isBlank()) {
+                client.respondEphemeral(interaction, "Missing required option: text");
+                return;
+            }
+
+            client.respondWithEmbeds(interaction, text, List.of(new DiscordEmbed("Echo", text, 0xFEE75C)));
+        });
+
+        client.onAutocomplete("echo", interaction -> {
+            String prefix = client.getStringOption(interaction, "text");
+            String safePrefix = prefix == null ? "" : prefix.toLowerCase();
+            List<AutocompleteChoice> choices = List.of("hello", "hey", "hola", "bonjour").stream()
+                    .filter(choice -> choice.startsWith(safePrefix))
+                    .limit(25)
+                    .map(choice -> new AutocompleteChoice(choice, choice))
+                    .toList();
+
+            client.respondWithAutocompleteChoices(interaction, choices);
+        });
+
+        client.onComponentInteraction("confirm_button", client::deferUpdate);
+        client.onModalSubmit("feedback_modal", interaction ->
+                client.respondEphemeralWithEmbeds(interaction, "Thanks for the feedback!", List.of(
+                        new DiscordEmbed("Feedback", "Received successfully", 0x57F287)
+                )));
 
         client.login();
         Thread.currentThread().join();
