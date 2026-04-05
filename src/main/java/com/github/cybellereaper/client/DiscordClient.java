@@ -155,6 +155,11 @@ public final class DiscordClient implements AutoCloseable {
         registerCommands(commands, this::registerGlobalSlashCommand);
     }
 
+    public void syncGlobalSlashCommands(List<SlashCommandDefinition> commands) {
+        Objects.requireNonNull(commands, "commands");
+        restClient.bulkOverwriteGlobalApplicationCommands(resolveApplicationId(), commands);
+    }
+
     public JsonNode registerGuildSlashCommand(String guildId, String commandName, String description) {
         return registerGuildSlashCommand(guildId, SlashCommandDefinition.simple(commandName, description));
     }
@@ -177,6 +182,12 @@ public final class DiscordClient implements AutoCloseable {
     public void registerGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
         requireNonBlank(guildId, "guildId");
         registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
+    }
+
+    public void syncGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(guildId, "guildId");
+        Objects.requireNonNull(commands, "commands");
+        restClient.bulkOverwriteGuildApplicationCommands(resolveApplicationId(), guildId, commands);
     }
 
     public void respondWithMessage(JsonNode interaction, String content) {
