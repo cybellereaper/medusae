@@ -10,10 +10,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.*;
-
 import java.util.function.Consumer;
 
 public final class DiscordGatewayClient implements WebSocket.Listener, AutoCloseable {
@@ -23,6 +24,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private final DiscordRestClient restClient;
 
     private final Map<String, CopyOnWriteArrayList<Consumer<JsonNode>>> listeners = new ConcurrentHashMap<>();
+    private final Map<String, CopyOnWriteArrayList<TypedEventListener<?>>> typedListeners = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler =
             Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("discord25-heartbeat-", 0).factory());
 
@@ -56,7 +58,41 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     }
 
     public void on(String eventName, Consumer<JsonNode> listener) {
-        listeners.computeIfAbsent(eventName, ignored -> new CopyOnWriteArrayList<>()).add(listener);
+        listeners
+                .computeIfAbsent(requireNonBlank(eventName, "eventName"), ignored -> new CopyOnWriteArrayList<>())
+                .add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    public <T> void on(String eventName, Class<T> eventType, Consumer<T> listener) {
+        typedListeners
+                .computeIfAbsent(requireNonBlank(eventName, "eventName"), ignored -> new CopyOnWriteArrayList<>())
+                .add(TypedEventListener.withDefaultDeserializer(eventType, listener));
+    }
+
+    public <T> void on(
+            String eventName,
+            Class<T> eventType,
+            EventDeserializer<T> deserializer,
+            Consumer<T> listener
+    ) {
+        typedListeners
+                .computeIfAbsent(requireNonBlank(eventName, "eventName"), ignored -> new CopyOnWriteArrayList<>())
+                .add(new TypedEventListener<>(eventType, deserializer, listener));
+    }
+
+    public boolean off(String eventName, Consumer<JsonNode> listener) {
+        CopyOnWriteArrayList<Consumer<JsonNode>> eventListeners = listeners.get(requireNonBlank(eventName, "eventName"));
+        return eventListeners != null && eventListeners.remove(listener);
+    }
+
+    public <T> boolean off(String eventName, Class<T> eventType, Consumer<T> listener) {
+        CopyOnWriteArrayList<TypedEventListener<?>> eventListeners =
+                typedListeners.get(requireNonBlank(eventName, "eventName"));
+        if (eventListeners == null) {
+            return false;
+        }
+
+        return eventListeners.removeIf(existing -> existing.matches(eventType, listener));
     }
 
     private WebSocket connect(URI uri) {
@@ -125,9 +161,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
         int op = payload.path("op").asInt();
         JsonNode d = payload.path("d");
+        JsonNode sequenceNode = payload.path("s");
 
-        if (!payload.path("s").isMissingNode() && !payload.path("s").isNull()) {
-            sequence = payload.path("s").asLong();
+        if (!sequenceNode.isMissingNode() && !sequenceNode.isNull()) {
+            sequence = sequenceNode.asLong();
         }
 
         switch (op) {
@@ -169,6 +206,14 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         if (eventListeners != null) {
             for (Consumer<JsonNode> listener : eventListeners) {
                 listener.accept(data);
+            }
+        }
+
+        List<TypedEventListener<?>> typedEventListeners = typedListeners.get(eventType);
+        if (typedEventListeners != null) {
+            Map<TypedEventKey, Object> typedEventCache = new HashMap<>(typedEventListeners.size());
+            for (TypedEventListener<?> typedListener : typedEventListeners) {
+                typedListener.accept(data, typedEventCache, objectMapper);
             }
         }
     }
@@ -268,6 +313,74 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         } catch (IOException exception) {
             throw new RuntimeException("Failed to serialize gateway payload", exception);
         }
+    }
+
+    @FunctionalInterface
+    public interface EventDeserializer<T> {
+        T deserialize(JsonNode rawEvent, ObjectMapper objectMapper);
+    }
+
+    private record TypedEventKey(Class<?> eventType, Object deserializerKey) {}
+
+    private static final class TypedEventListener<T> {
+        private final Class<T> eventType;
+        private final EventDeserializer<T> deserializer;
+        private final Consumer<T> listener;
+        private final boolean customDeserializer;
+
+        private static final Object DEFAULT_DESERIALIZER_KEY = new Object();
+
+        private TypedEventListener(Class<T> eventType, EventDeserializer<T> deserializer, Consumer<T> listener) {
+            this(eventType, deserializer, listener, true);
+        }
+
+        private TypedEventListener(
+                Class<T> eventType,
+                EventDeserializer<T> deserializer,
+                Consumer<T> listener,
+                boolean customDeserializer
+        ) {
+            this.eventType = Objects.requireNonNull(eventType, "eventType");
+            this.deserializer = Objects.requireNonNull(deserializer, "deserializer");
+            this.listener = Objects.requireNonNull(listener, "listener");
+            this.customDeserializer = customDeserializer;
+        }
+
+        private static <T> EventDeserializer<T> defaultDeserializer(Class<T> eventType) {
+            return (rawEvent, objectMapper) -> objectMapper.convertValue(rawEvent, eventType);
+        }
+
+        private static <T> TypedEventListener<T> withDefaultDeserializer(Class<T> eventType, Consumer<T> listener) {
+            return new TypedEventListener<>(eventType, defaultDeserializer(eventType), listener, false);
+        }
+
+        @SuppressWarnings("unchecked")
+        private void accept(JsonNode rawEvent, Map<TypedEventKey, Object> eventCache, ObjectMapper objectMapper) {
+            Object deserializerKey = customDeserializer ? deserializer : DEFAULT_DESERIALIZER_KEY;
+            TypedEventKey cacheKey = new TypedEventKey(eventType, deserializerKey);
+            Object typedEvent = eventCache.computeIfAbsent(cacheKey, ignored -> deserialize(rawEvent, objectMapper));
+            listener.accept((T) typedEvent);
+        }
+
+        private T deserialize(JsonNode rawEvent, ObjectMapper objectMapper) {
+            try {
+                return deserializer.deserialize(rawEvent, objectMapper);
+            } catch (IllegalArgumentException exception) {
+                throw new RuntimeException("Failed to deserialize gateway event to " + eventType.getName(), exception);
+            }
+        }
+
+        private boolean matches(Class<?> expectedType, Consumer<?> expectedListener) {
+            return eventType == expectedType && listener == expectedListener;
+        }
+    }
+
+    private static String requireNonBlank(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName);
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value;
     }
 
     @Override

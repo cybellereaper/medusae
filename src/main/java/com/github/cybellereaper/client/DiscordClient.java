@@ -3,6 +3,7 @@ package com.github.cybellereaper.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.gateway.DiscordGatewayClient;
+import com.github.cybellereaper.gateway.DiscordGatewayClient.EventDeserializer;
 import com.github.cybellereaper.http.DiscordRestClient;
 
 import java.net.http.HttpClient;
@@ -40,6 +41,27 @@ public final class DiscordClient implements AutoCloseable {
 
     public void on(String eventType, Consumer<JsonNode> listener) {
         gatewayClient.on(eventType, listener);
+    }
+
+    public <T> void on(String eventType, Class<T> eventClass, Consumer<T> listener) {
+        gatewayClient.on(eventType, eventClass, listener);
+    }
+
+    public <T> void on(
+            String eventType,
+            Class<T> eventClass,
+            EventDeserializer<T> deserializer,
+            Consumer<T> listener
+    ) {
+        gatewayClient.on(eventType, eventClass, deserializer, listener);
+    }
+
+    public boolean off(String eventType, Consumer<JsonNode> listener) {
+        return gatewayClient.off(eventType, listener);
+    }
+
+    public <T> boolean off(String eventType, Class<T> eventClass, Consumer<T> listener) {
+        return gatewayClient.off(eventType, eventClass, listener);
     }
 
     public void onSlashCommand(String commandName, Consumer<JsonNode> listener) {
