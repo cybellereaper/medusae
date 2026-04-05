@@ -39,6 +39,8 @@ class InteractionContextTest {
 
         assertEquals("alice", context.optionString("target"));
         assertNull(context.optionString("missing"));
+        assertEquals("alice", context.requiredOptionString("target"));
+        assertThrows(IllegalArgumentException.class, () -> context.requiredOptionString("missing"));
     }
 
     @Test
@@ -88,9 +90,54 @@ class InteractionContextTest {
         assertEquals("9", context.id());
         assertEquals("xyz", context.token());
         assertEquals("feedback_modal", context.customId());
+        assertEquals(5, context.interactionType());
 
         context.deferUpdate();
         assertEquals(6, responseType.get());
         assertEquals(1, responseCount.get());
+    }
+
+    @Test
+    void parsesNumericAndBooleanOptionsSafely() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "55",
+                  "token": "abc",
+                  "type": 2,
+                  "data": {
+                    "type": 1,
+                    "name": "config",
+                    "options": [
+                      { "name": "count", "value": 42 },
+                      { "name": "enabled", "value": true },
+                      { "name": "text_num", "value": "77" },
+                      { "name": "text_bool", "value": "false" },
+                      { "name": "invalid_num", "value": "x42" }
+                    ]
+                  },
+                  "guild_id": "guild-1",
+                  "channel_id": "chan-9",
+                  "member": {
+                    "user": {
+                      "id": "user-3"
+                    }
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertEquals(42L, context.optionLong("count"));
+        assertEquals(42, context.optionInt("count"));
+        assertEquals(77L, context.optionLong("text_num"));
+        assertNull(context.optionLong("invalid_num"));
+        assertEquals(true, context.optionBoolean("enabled"));
+        assertEquals(false, context.optionBoolean("text_bool"));
+        assertNull(context.optionBoolean("missing"));
+        assertEquals("guild-1", context.guildId());
+        assertEquals("chan-9", context.channelId());
+        assertEquals("user-3", context.userId());
+        assertEquals(1, context.commandType());
     }
 }

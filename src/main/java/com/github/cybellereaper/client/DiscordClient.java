@@ -82,6 +82,7 @@ public final class DiscordClient implements AutoCloseable {
         return gatewayClient.off(eventType, eventClass, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onSlashCommand(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerSlashHandler(commandName, listener);
     }
@@ -90,6 +91,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerSlashContextHandler(commandName, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onAutocomplete(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerAutocompleteHandler(commandName, listener);
     }
@@ -98,6 +100,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerAutocompleteContextHandler(commandName, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onUserContextMenu(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerUserContextMenuHandler(commandName, listener);
     }
@@ -106,6 +109,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerUserContextMenuContextHandler(commandName, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onMessageContextMenu(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerMessageContextMenuHandler(commandName, listener);
     }
@@ -114,6 +118,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerMessageContextMenuContextHandler(commandName, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onComponentInteraction(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerComponentHandler(customId, listener);
     }
@@ -122,6 +127,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerComponentContextHandler(customId, listener);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void onModalSubmit(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerModalHandler(customId, listener);
     }
@@ -183,46 +189,57 @@ public final class DiscordClient implements AutoCloseable {
         registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithMessage(JsonNode interaction, String content) {
         respondWithMessage(interaction, DiscordMessage.ofContent(content));
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithMessage(JsonNode interaction, DiscordMessage message) {
         slashCommandRouter.respondWithMessage(interaction, message);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondWithEmbeds(interaction, content, embeds);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondEphemeral(JsonNode interaction, String content) {
         slashCommandRouter.respondEphemeral(interaction, content);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondEphemeralWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondEphemeralWithEmbeds(interaction, content, embeds);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithModal(JsonNode interaction, DiscordModal modal) {
         slashCommandRouter.respondWithModal(interaction, modal);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithAutocompleteChoices(JsonNode interaction, List<AutocompleteChoice> choices) {
         slashCommandRouter.respondWithAutocompleteChoices(interaction, choices);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void deferMessage(JsonNode interaction) {
         slashCommandRouter.deferMessage(interaction);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public void deferUpdate(JsonNode interaction) {
         slashCommandRouter.deferUpdate(interaction);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public String getStringOption(JsonNode interaction, String optionName) {
         return slashCommandRouter.getOptionString(interaction, optionName);
     }
 
+    @Deprecated(forRemoval = false, since = "1.1")
     public String getModalValue(JsonNode interaction, String customId) {
         return slashCommandRouter.getModalValue(interaction, customId);
     }

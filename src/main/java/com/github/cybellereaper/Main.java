@@ -66,7 +66,7 @@ void main() throws Exception {
             }
         });
 
-        client.onSlashCommand("ping", interaction -> {
+        client.onSlashCommandContext("ping", context -> {
             DiscordActionRow selectMenuRow = DiscordActionRow.of(List.of(
                     DiscordStringSelectMenu.of("theme_select", List.of(
                                     DiscordSelectOption.of("Light", "light"),
@@ -77,29 +77,28 @@ void main() throws Exception {
                             .withSelectionRange(1, 1)
             ));
 
-            client.respondWithMessage(interaction,
-                    DiscordMessage.ofEmbeds("pong", List.of(
-                                    new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
-                                            .withThumbnail("https://cdn.discordapp.com/embed/avatars/0.png")
-                            ))
-                            .withComponents(List.of(selectMenuRow)));
+            context.respondWithMessage(DiscordMessage.ofEmbeds("pong", List.of(
+                            new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
+                                    .withThumbnail("https://cdn.discordapp.com/embed/avatars/0.png")
+                    ))
+                    .withComponents(List.of(selectMenuRow)));
         });
 
-        client.onSlashCommand("echo", interaction -> {
-            String text = client.getStringOption(interaction, "text");
+        client.onSlashCommandContext("echo", context -> {
+            String text = context.optionString("text");
             if (text == null || text.isBlank()) {
-                client.respondEphemeral(interaction, "Missing required option: text");
+                context.respondEphemeral("Missing required option: text");
                 return;
             }
 
-            client.respondWithEmbeds(interaction, text, List.of(
+            context.respondWithEmbeds(text, List.of(
                     new DiscordEmbed("Echo", text, 0xFEE75C)
                             .withUrl("https://discord.com/developers/docs")
             ));
         });
 
-        client.onAutocomplete("echo", interaction -> {
-            String prefix = client.getStringOption(interaction, "text");
+        client.onAutocompleteContext("echo", context -> {
+            String prefix = context.optionString("text");
             String safePrefix = prefix == null ? "" : prefix.toLowerCase();
             List<AutocompleteChoice> choices = List.of("hello", "hey", "hola", "bonjour").stream()
                     .filter(choice -> choice.startsWith(safePrefix))
@@ -107,23 +106,23 @@ void main() throws Exception {
                     .map(choice -> new AutocompleteChoice(choice, choice))
                     .toList();
 
-            client.respondWithAutocompleteChoices(interaction, choices);
+            context.respondWithAutocompleteChoices(choices);
         });
 
-        client.onUserContextMenu("Inspect User", interaction ->
-                client.respondEphemeral(interaction, "User inspection invoked."));
+        client.onUserContextMenuContext("Inspect User", context ->
+                context.respondEphemeral("User inspection invoked."));
 
-        client.onMessageContextMenu("Quote Message", interaction ->
-                client.respondEphemeral(interaction, "Message quote command invoked."));
+        client.onMessageContextMenuContext("Quote Message", context ->
+                context.respondEphemeral("Message quote command invoked."));
 
-        client.onComponentInteraction("confirm_button", interaction ->
-                client.respondEphemeral(interaction, "Confirmed!"));
+        client.onComponentInteractionContext("confirm_button", context ->
+                context.respondEphemeral("Confirmed!"));
 
-        client.onComponentInteraction("theme_select", interaction ->
-                client.respondEphemeral(interaction, "Theme updated."));
+        client.onComponentInteractionContext("theme_select", context ->
+                context.respondEphemeral("Theme updated."));
 
-        client.onModalSubmit("feedback_modal", interaction ->
-                client.respondEphemeralWithEmbeds(interaction, "Thanks for the feedback!", List.of(
+        client.onModalSubmitContext("feedback_modal", context ->
+                context.respondEphemeralWithEmbeds("Thanks for the feedback!", List.of(
                         new DiscordEmbed("Feedback", "Received successfully", 0x57F287)
                                 .withThumbnail("https://cdn.discordapp.com/embed/avatars/1.png")
                 )));

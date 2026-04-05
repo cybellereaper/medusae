@@ -30,16 +30,14 @@
 
 ### Interaction responses
 
-- `respondWithMessage(...)`
-- `respondWithEmbeds(...)`
-- `respondEphemeral(...)`
-- `respondWithAutocompleteChoices(...)`
-- `respondWithModal(JsonNode, DiscordModal)`
-- `deferMessage(...)`
-- `deferUpdate(...)`
-- `on*Context(...)` variants for typed handlers with `InteractionContext` (response helpers + option/modal access).
+- Prefer `on*Context(...)` handlers and respond through `InteractionContext`.
+- `InteractionContext` helpers include:
+  - Response helpers: `respondWithMessage`, `respondWithEmbeds`, `respondEphemeral`, `respondWithModal`, `respondWithAutocompleteChoices`, `deferMessage`, `deferUpdate`
+  - Option helpers: `optionString`, `requiredOptionString`, `optionLong`, `optionInt`, `optionBoolean`
+  - Modal helper: `modalValue`
+  - Metadata helpers: `id`, `token`, `interactionType`, `commandType`, `guildId`, `channelId`, `userId`
 
-- `getModalValue(JsonNode, String)` for modal submit field extraction.
+- Legacy raw `JsonNode` interaction helpers are still available but deprecated.
 
 ### Message sending
 

@@ -13,6 +13,7 @@ public final class InteractionContext {
     private static final String NAME_FIELD = "name";
     private static final String VALUE_FIELD = "value";
     private static final String CUSTOM_ID_FIELD = "custom_id";
+    private static final String TYPE_FIELD = "type";
     private static final int MAX_AUTOCOMPLETE_CHOICES = 25;
 
     private final JsonNode interaction;
@@ -43,6 +44,27 @@ public final class InteractionContext {
         return textOrNull(interaction.path(DATA_FIELD).path(NAME_FIELD));
     }
 
+    public int interactionType() {
+        return interaction.path(TYPE_FIELD).asInt(0);
+    }
+
+    public int commandType() {
+        return interaction.path(DATA_FIELD).path(TYPE_FIELD).asInt(0);
+    }
+
+    public String guildId() {
+        return textOrNull(interaction.path("guild_id"));
+    }
+
+    public String channelId() {
+        return textOrNull(interaction.path("channel_id"));
+    }
+
+    public String userId() {
+        String memberUserId = textOrNull(interaction.path("member").path("user").path("id"));
+        return memberUserId != null ? memberUserId : textOrNull(interaction.path("user").path("id"));
+    }
+
     public String customId() {
         return textOrNull(interaction.path(DATA_FIELD).path(CUSTOM_ID_FIELD));
     }
@@ -51,6 +73,62 @@ public final class InteractionContext {
         Objects.requireNonNull(optionName, "optionName");
         JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
         return option == null ? null : textOrNull(option.path(VALUE_FIELD));
+    }
+
+    public String requiredOptionString(String optionName) {
+        String value = optionString(optionName);
+        if (value == null) {
+            throw new IllegalArgumentException("Missing required option: " + optionName);
+        }
+        return value;
+    }
+
+    public Long optionLong(String optionName) {
+        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
+        if (option == null) {
+            return null;
+        }
+        JsonNode value = option.path(VALUE_FIELD);
+        if (value.isIntegralNumber()) {
+            return value.longValue();
+        }
+        if (value.isTextual()) {
+            try {
+                return Long.parseLong(value.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    public Integer optionInt(String optionName) {
+        Long value = optionLong(optionName);
+        if (value == null || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+            return null;
+        }
+        return value.intValue();
+    }
+
+    public Boolean optionBoolean(String optionName) {
+        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
+        if (option == null) {
+            return null;
+        }
+        JsonNode value = option.path(VALUE_FIELD);
+        if (value.isBoolean()) {
+            return value.booleanValue();
+        }
+        if (value.isTextual()) {
+            String text = value.asText().trim();
+            if ("true".equalsIgnoreCase(text)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(text)) {
+                return false;
+            }
+        }
+        return null;
     }
 
     public String modalValue(String customId) {

@@ -32,7 +32,7 @@ DiscordClientConfig config = DiscordClientConfig.builder(token)
         .build();
 
 try (DiscordClient client = DiscordClient.create(config)) {
-    client.onSlashCommand("ping", interaction -> client.respondWithMessage(interaction, "pong"));
+    client.onSlashCommandContext("ping", context -> context.respondWithMessage("pong"));
 
     client.registerGlobalSlashCommand("ping", "Reply with pong");
     client.login();
