@@ -106,12 +106,28 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerComponentContextHandler(customId, listener);
     }
 
+    public void onComponentInteractionPrefix(String customIdPrefix, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerComponentPrefixHandler(customIdPrefix, listener);
+    }
+
+    public void onComponentInteractionContextPrefix(String customIdPrefix, InteractionHandler listener) {
+        slashCommandRouter.registerComponentPrefixContextHandler(customIdPrefix, listener);
+    }
+
     public void onModalSubmit(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerModalHandler(customId, listener);
     }
 
     public void onModalSubmitContext(String customId, ModalSubmitHandler listener) {
         slashCommandRouter.registerModalContextHandler(customId, listener);
+    }
+
+    public void onModalSubmitPrefix(String customIdPrefix, Consumer<JsonNode> listener) {
+        slashCommandRouter.registerModalPrefixHandler(customIdPrefix, listener);
+    }
+
+    public void onModalSubmitContextPrefix(String customIdPrefix, ModalSubmitHandler listener) {
+        slashCommandRouter.registerModalPrefixContextHandler(customIdPrefix, listener);
     }
 
     public DiscordApi api() {

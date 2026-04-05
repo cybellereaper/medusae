@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -40,6 +41,12 @@ final class SlashCommandRouter {
     private final Map<String, ModalSubmitHandler> modalContextHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<JsonNode>> autocompleteHandlers = new ConcurrentHashMap<>();
     private final Map<String, SlashCommandHandler> autocompleteContextHandlers = new ConcurrentHashMap<>();
+
+    private final List<PrefixHandler<Consumer<JsonNode>>> componentPrefixHandlers = new CopyOnWriteArrayList<>();
+    private final List<PrefixHandler<InteractionHandler>> componentPrefixContextHandlers = new CopyOnWriteArrayList<>();
+    private final List<PrefixHandler<Consumer<JsonNode>>> modalPrefixHandlers = new CopyOnWriteArrayList<>();
+    private final List<PrefixHandler<ModalSubmitHandler>> modalPrefixContextHandlers = new CopyOnWriteArrayList<>();
+
     private final InteractionResponder responder;
 
     SlashCommandRouter(InteractionResponder responder) {
@@ -62,12 +69,28 @@ final class SlashCommandRouter {
         registerUniqueHandler(componentContextHandlers, customId, "component", handler);
     }
 
+    void registerComponentPrefixHandler(String customIdPrefix, Consumer<JsonNode> handler) {
+        registerPrefixHandler(componentPrefixHandlers, customIdPrefix, "component", handler);
+    }
+
+    void registerComponentPrefixContextHandler(String customIdPrefix, InteractionHandler handler) {
+        registerPrefixHandler(componentPrefixContextHandlers, customIdPrefix, "component", handler);
+    }
+
     void registerModalHandler(String customId, Consumer<JsonNode> handler) {
         registerUniqueHandler(modalHandlers, customId, "modal", handler);
     }
 
     void registerModalContextHandler(String customId, ModalSubmitHandler handler) {
         registerUniqueHandler(modalContextHandlers, customId, "modal", handler);
+    }
+
+    void registerModalPrefixHandler(String customIdPrefix, Consumer<JsonNode> handler) {
+        registerPrefixHandler(modalPrefixHandlers, customIdPrefix, "modal", handler);
+    }
+
+    void registerModalPrefixContextHandler(String customIdPrefix, ModalSubmitHandler handler) {
+        registerPrefixHandler(modalPrefixContextHandlers, customIdPrefix, "modal", handler);
     }
 
     void registerAutocompleteHandler(String commandName, Consumer<JsonNode> handler) {
@@ -100,46 +123,10 @@ final class SlashCommandRouter {
         }
 
         int interactionType = interaction.path("type").asInt();
-        if (interactionType == PING_INTERACTION_TYPE) {
-            respond(interaction, PONG_RESPONSE_TYPE, null);
-            return;
-        }
-
-        if (interactionType == APPLICATION_COMMAND_INTERACTION_TYPE) {
-            int commandType = interaction.path("data").path("type").asInt(CHAT_INPUT_COMMAND_TYPE);
-            if (commandType == USER_CONTEXT_COMMAND_TYPE) {
-                dispatchRawAndContextByName(
-                        interaction,
-                        userContextMenuHandlers,
-                        userContextMenuContextHandlers,
-                        "name",
-                        this::toInteractionContext,
-                        InteractionHandler::handle
-                );
-            } else if (commandType == MESSAGE_CONTEXT_COMMAND_TYPE) {
-                dispatchRawAndContextByName(
-                        interaction,
-                        messageContextMenuHandlers,
-                        messageContextMenuContextHandlers,
-                        "name",
-                        this::toInteractionContext,
-                        InteractionHandler::handle
-                );
-            } else {
-                dispatchRawAndContextByName(
-                        interaction,
-                        slashHandlers,
-                        slashContextHandlers,
-                        "name",
-                        this::toSlashCommandInteraction,
-                        SlashCommandHandler::handle
-                );
-            }
-            return;
-        }
-
-        if (interactionType == APPLICATION_COMMAND_AUTOCOMPLETE_INTERACTION_TYPE) {
-            dispatchRawAndContextByName(
+        switch (interactionType) {
+            case PING_INTERACTION_TYPE -> respond(interaction, PONG_RESPONSE_TYPE, null);
+            case APPLICATION_COMMAND_INTERACTION_TYPE -> handleApplicationCommandInteraction(interaction);
+            case APPLICATION_COMMAND_AUTOCOMPLETE_INTERACTION_TYPE -> dispatchRawAndContextByName(
                     interaction,
                     autocompleteHandlers,
                     autocompleteContextHandlers,
@@ -147,28 +134,28 @@ final class SlashCommandRouter {
                     this::toSlashCommandInteraction,
                     SlashCommandHandler::handle
             );
-            return;
-        }
-
-        if (interactionType == MESSAGE_COMPONENT_INTERACTION_TYPE || interactionType == MODAL_SUBMIT_INTERACTION_TYPE) {
-            if (interactionType == MESSAGE_COMPONENT_INTERACTION_TYPE) {
-                dispatchRawAndContextByName(
-                        interaction,
-                        componentHandlers,
-                        componentContextHandlers,
-                        "custom_id",
-                        this::toInteractionContext,
-                        InteractionHandler::handle
-                );
-            } else {
-                dispatchRawAndContextByName(
-                        interaction,
-                        modalHandlers,
-                        modalContextHandlers,
-                        "custom_id",
-                        this::toModalSubmitInteraction,
-                        ModalSubmitHandler::handle
-                );
+            case MESSAGE_COMPONENT_INTERACTION_TYPE -> dispatchRawAndContextByNameOrPrefix(
+                    interaction,
+                    componentHandlers,
+                    componentContextHandlers,
+                    componentPrefixHandlers,
+                    componentPrefixContextHandlers,
+                    "custom_id",
+                    this::toInteractionContext,
+                    InteractionHandler::handle
+            );
+            case MODAL_SUBMIT_INTERACTION_TYPE -> dispatchRawAndContextByNameOrPrefix(
+                    interaction,
+                    modalHandlers,
+                    modalContextHandlers,
+                    modalPrefixHandlers,
+                    modalPrefixContextHandlers,
+                    "custom_id",
+                    this::toModalSubmitInteraction,
+                    ModalSubmitHandler::handle
+            );
+            default -> {
+                // no-op for unsupported interaction types
             }
         }
     }
@@ -260,6 +247,42 @@ final class SlashCommandRouter {
         return null;
     }
 
+    private void handleApplicationCommandInteraction(JsonNode interaction) {
+        int commandType = interaction.path("data").path("type").asInt(CHAT_INPUT_COMMAND_TYPE);
+        if (commandType == USER_CONTEXT_COMMAND_TYPE) {
+            dispatchRawAndContextByName(
+                    interaction,
+                    userContextMenuHandlers,
+                    userContextMenuContextHandlers,
+                    "name",
+                    this::toInteractionContext,
+                    InteractionHandler::handle
+            );
+            return;
+        }
+
+        if (commandType == MESSAGE_CONTEXT_COMMAND_TYPE) {
+            dispatchRawAndContextByName(
+                    interaction,
+                    messageContextMenuHandlers,
+                    messageContextMenuContextHandlers,
+                    "name",
+                    this::toInteractionContext,
+                    InteractionHandler::handle
+            );
+            return;
+        }
+
+        dispatchRawAndContextByName(
+                interaction,
+                slashHandlers,
+                slashContextHandlers,
+                "name",
+                this::toSlashCommandInteraction,
+                SlashCommandHandler::handle
+        );
+    }
+
     private <H, C> void dispatchRawAndContextByName(
             JsonNode interaction,
             Map<String, Consumer<JsonNode>> rawHandlers,
@@ -268,19 +291,68 @@ final class SlashCommandRouter {
             Function<JsonNode, C> contextFactory,
             BiConsumer<H, C> contextInvoker
     ) {
+        dispatchRawAndContextByNameOrPrefix(
+                interaction,
+                rawHandlers,
+                contextHandlers,
+                List.of(),
+                List.of(),
+                keyFieldName,
+                contextFactory,
+                contextInvoker
+        );
+    }
+
+    private <H, C> void dispatchRawAndContextByNameOrPrefix(
+            JsonNode interaction,
+            Map<String, Consumer<JsonNode>> rawHandlers,
+            Map<String, H> contextHandlers,
+            List<PrefixHandler<Consumer<JsonNode>>> prefixRawHandlers,
+            List<PrefixHandler<H>> prefixContextHandlers,
+            String keyFieldName,
+            Function<JsonNode, C> contextFactory,
+            BiConsumer<H, C> contextInvoker
+    ) {
         String handlerKey = interaction.path("data").path(keyFieldName).asText("");
+
         Consumer<JsonNode> rawHandler = rawHandlers.get(handlerKey);
+        if (rawHandler == null) {
+            rawHandler = findPrefixHandler(prefixRawHandlers, handlerKey);
+        }
         if (rawHandler != null) {
             rawHandler.accept(interaction);
         }
 
         H contextHandler = contextHandlers.get(handlerKey);
         if (contextHandler == null) {
+            contextHandler = findPrefixHandler(prefixContextHandlers, handlerKey);
+        }
+        if (contextHandler == null) {
             return;
         }
 
         C context = contextFactory.apply(interaction);
         contextInvoker.accept(contextHandler, context);
+    }
+
+    private <H> H findPrefixHandler(List<PrefixHandler<H>> handlers, String key) {
+        PrefixHandler<H> bestMatch = null;
+        int bestMatchLength = -1;
+
+        for (PrefixHandler<H> handler : handlers) {
+            String prefix = handler.prefix();
+            if (!key.startsWith(prefix)) {
+                continue;
+            }
+
+            int prefixLength = prefix.length();
+            if (prefixLength > bestMatchLength) {
+                bestMatch = handler;
+                bestMatchLength = prefixLength;
+            }
+        }
+
+        return bestMatch == null ? null : bestMatch.handler();
     }
 
     private InteractionContext toInteractionContext(JsonNode interaction) {
@@ -323,11 +395,32 @@ final class SlashCommandRouter {
         }
     }
 
+    private static <H> void registerPrefixHandler(
+            List<PrefixHandler<H>> handlers,
+            String prefix,
+            String handlerType,
+            H handler
+    ) {
+        validateKey(prefix, handlerType + " prefix");
+        Objects.requireNonNull(handler, "handler");
+
+        PrefixHandler<H> prefixHandler = new PrefixHandler<>(prefix, handler);
+        boolean duplicate = handlers.stream().anyMatch(existing -> existing.prefix().equals(prefix));
+        if (duplicate) {
+            throw new IllegalArgumentException("Interaction prefix handler already registered for " + handlerType + ": " + prefix);
+        }
+
+        handlers.add(prefixHandler);
+    }
+
     private static void validateKey(String key, String keyType) {
         Objects.requireNonNull(key, keyType + " key");
         if (key.isBlank()) {
             throw new IllegalArgumentException(keyType + " key must not be blank");
         }
+    }
+
+    private record PrefixHandler<H>(String prefix, H handler) {
     }
 
     @FunctionalInterface

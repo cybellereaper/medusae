@@ -403,6 +403,85 @@ class SlashCommandRouterTest {
         assertEquals("report.txt", context.resolvedAttachment("a-1").path("filename").asText());
     }
 
+
+    @Test
+    void routesComponentInteractionsUsingPrefixHandlers() throws Exception {
+        AtomicInteger rawCount = new AtomicInteger(0);
+        AtomicInteger contextCount = new AtomicInteger(0);
+        AtomicReference<String> routedCustomId = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerComponentPrefixHandler("ticket:", ignored -> rawCount.incrementAndGet());
+        router.registerComponentPrefixContextHandler("ticket:", interaction -> {
+            contextCount.incrementAndGet();
+            routedCustomId.set(interaction.customId());
+        });
+
+        router.handleInteraction(interactionPayload(3, null, "ticket:close:42", "1", "token", null, null));
+
+        assertEquals(1, rawCount.get());
+        assertEquals(1, contextCount.get());
+        assertEquals("ticket:close:42", routedCustomId.get());
+    }
+
+    @Test
+    void prefersLongestPrefixWhenMultipleComponentPrefixesMatch() throws Exception {
+        AtomicInteger broadPrefixCount = new AtomicInteger(0);
+        AtomicInteger specificPrefixCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerComponentPrefixHandler("ticket:", ignored -> broadPrefixCount.incrementAndGet());
+        router.registerComponentPrefixHandler("ticket:close:", ignored -> specificPrefixCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(3, null, "ticket:close:42", "1", "token", null, null));
+
+        assertEquals(0, broadPrefixCount.get());
+        assertEquals(1, specificPrefixCount.get());
+    }
+
+    @Test
+    void routesModalInteractionsUsingPrefixHandlers() throws Exception {
+        AtomicReference<String> capturedCustomId = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerModalPrefixContextHandler("feedback:", interaction -> capturedCustomId.set(interaction.context().customId()));
+
+        router.handleInteraction(interactionPayload(5, null, "feedback:long-form", "1", "token", null, null));
+
+        assertEquals("feedback:long-form", capturedCustomId.get());
+    }
+
+    @Test
+    void prefersExactComponentHandlerOverPrefixHandler() throws Exception {
+        AtomicInteger exactCount = new AtomicInteger(0);
+        AtomicInteger prefixCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerComponentPrefixHandler("ticket:", ignored -> prefixCount.incrementAndGet());
+        router.registerComponentHandler("ticket:close:42", ignored -> exactCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(3, null, "ticket:close:42", "1", "token", null, null));
+
+        assertEquals(1, exactCount.get());
+        assertEquals(0, prefixCount.get());
+    }
+
+    @Test
+    void rejectsDuplicatePrefixHandlerRegistration() {
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+
+        router.registerModalPrefixHandler("feedback:", ignored -> {
+        });
+
+        assertThrows(IllegalArgumentException.class, () -> router.registerModalPrefixHandler("feedback:", ignored -> {
+        }));
+    }
+
     @Test
     void rejectsDuplicateHandlerRegistration() {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
