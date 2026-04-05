@@ -3,6 +3,7 @@ package com.github.cybellereaper.client;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,11 +58,11 @@ final class SlashCommandRouter {
     }
 
     void registerSlashHandler(String commandName, Consumer<JsonNode> handler) {
-        registerUniqueHandler(slashHandlers, commandName, "slash command", handler);
+        registerUniqueHandler(slashHandlers, normalizeSlashCommandName(commandName), "slash command", handler);
     }
 
     void registerSlashContextHandler(String commandName, SlashCommandHandler handler) {
-        registerUniqueHandler(slashContextHandlers, commandName, "slash command", handler);
+        registerUniqueHandler(slashContextHandlers, normalizeSlashCommandName(commandName), "slash command", handler);
     }
 
     void registerComponentHandler(String customId, Consumer<JsonNode> handler) {
@@ -97,11 +98,11 @@ final class SlashCommandRouter {
     }
 
     void registerAutocompleteHandler(String commandName, Consumer<JsonNode> handler) {
-        registerUniqueHandler(autocompleteHandlers, commandName, "autocomplete", handler);
+        registerUniqueHandler(autocompleteHandlers, normalizeSlashCommandName(commandName), "autocomplete", handler);
     }
 
     void registerAutocompleteContextHandler(String commandName, SlashCommandHandler handler) {
-        registerUniqueHandler(autocompleteContextHandlers, commandName, "autocomplete", handler);
+        registerUniqueHandler(autocompleteContextHandlers, normalizeSlashCommandName(commandName), "autocomplete", handler);
     }
 
     void registerUserContextMenuHandler(String commandName, Consumer<JsonNode> handler) {
@@ -141,7 +142,8 @@ final class SlashCommandRouter {
                             autocompleteContextHandlers,
                             "name",
                             this::toSlashCommandInteraction,
-                            SlashCommandHandler::handle
+                            SlashCommandHandler::handle,
+                            SlashCommandRouter::normalizeSlashCommandName
                     );
                     if (!handled) {
                         safeRespondAutocomplete(interaction);
@@ -156,7 +158,8 @@ final class SlashCommandRouter {
                             componentPrefixContextHandlers,
                             "custom_id",
                             this::toInteractionContext,
-                            InteractionHandler::handle
+                            InteractionHandler::handle,
+                            Function.identity()
                     );
                     if (!handled) {
                         safeRespondEphemeral(interaction, UNHANDLED_INTERACTION_MESSAGE);
@@ -171,7 +174,8 @@ final class SlashCommandRouter {
                             modalPrefixContextHandlers,
                             "custom_id",
                             this::toModalSubmitInteraction,
-                            ModalSubmitHandler::handle
+                            ModalSubmitHandler::handle,
+                            Function.identity()
                     );
                     if (!handled) {
                         safeRespondEphemeral(interaction, UNHANDLED_INTERACTION_MESSAGE);
@@ -283,7 +287,8 @@ final class SlashCommandRouter {
                     userContextMenuContextHandlers,
                     "name",
                     this::toInteractionContext,
-                    InteractionHandler::handle
+                    InteractionHandler::handle,
+                    Function.identity()
             );
         }
 
@@ -294,7 +299,8 @@ final class SlashCommandRouter {
                     messageContextMenuContextHandlers,
                     "name",
                     this::toInteractionContext,
-                    InteractionHandler::handle
+                    InteractionHandler::handle,
+                    Function.identity()
             );
         }
 
@@ -304,7 +310,8 @@ final class SlashCommandRouter {
                 slashContextHandlers,
                 "name",
                 this::toSlashCommandInteraction,
-                SlashCommandHandler::handle
+                SlashCommandHandler::handle,
+                SlashCommandRouter::normalizeSlashCommandName
         );
     }
 
@@ -314,7 +321,8 @@ final class SlashCommandRouter {
             Map<String, H> contextHandlers,
             String keyFieldName,
             Function<JsonNode, C> contextFactory,
-            BiConsumer<H, C> contextInvoker
+            BiConsumer<H, C> contextInvoker,
+            Function<String, String> keyNormalizer
     ) {
         return dispatchRawAndContextByNameOrPrefix(
                 interaction,
@@ -324,7 +332,8 @@ final class SlashCommandRouter {
                 List.of(),
                 keyFieldName,
                 contextFactory,
-                contextInvoker
+                contextInvoker,
+                keyNormalizer
         );
     }
 
@@ -336,9 +345,10 @@ final class SlashCommandRouter {
             List<PrefixHandler<H>> prefixContextHandlers,
             String keyFieldName,
             Function<JsonNode, C> contextFactory,
-            BiConsumer<H, C> contextInvoker
+            BiConsumer<H, C> contextInvoker,
+            Function<String, String> keyNormalizer
     ) {
-        String handlerKey = interaction.path("data").path(keyFieldName).asText("");
+        String handlerKey = keyNormalizer.apply(interaction.path("data").path(keyFieldName).asText(""));
 
         Consumer<JsonNode> rawHandler = rawHandlers.get(handlerKey);
         if (rawHandler == null) {
@@ -363,6 +373,15 @@ final class SlashCommandRouter {
         return true;
     }
 
+
+    private static String normalizeSlashCommandName(String commandName) {
+        Objects.requireNonNull(commandName, "commandName");
+        String normalized = commandName.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException("commandName must not be blank");
+        }
+        return normalized;
+    }
     private void safeRespondEphemeral(JsonNode interaction, String content) {
         try {
             respondEphemeral(interaction, content);
@@ -432,7 +451,11 @@ final class SlashCommandRouter {
     ) {
         validateKey(key, handlerType);
         Objects.requireNonNull(handler, "handler");
-        handlers.put(key, handler);
+
+        H existing = handlers.putIfAbsent(key, handler);
+        if (existing != null) {
+            throw new IllegalStateException(handlerType + " handler already registered for key: " + key);
+        }
     }
 
     private static <H> void registerPrefixHandler(

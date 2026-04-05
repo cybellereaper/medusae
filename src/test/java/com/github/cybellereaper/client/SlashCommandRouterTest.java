@@ -27,6 +27,63 @@ class SlashCommandRouterTest {
         assertEquals(1, invocationCount.get());
     }
 
+
+    @Test
+    void routesSlashCommandsCaseInsensitively() throws Exception {
+        AtomicInteger invocationCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerSlashHandler("PING", ignored -> invocationCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(2, "ping", null, "42", "token-value", null, 1));
+
+        assertEquals(1, invocationCount.get());
+    }
+
+    @Test
+    void rejectsDuplicateSlashHandlerRegistrationWhenDifferingOnlyByCase() {
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerSlashHandler("Ping", ignored -> {
+        });
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> router.registerSlashHandler("ping", ignored -> {
+                })
+        );
+
+        assertTrue(exception.getMessage().contains("already registered"));
+    }
+
+    @Test
+    void handlesSlashCommandAcrossMultipleInvocations() throws Exception {
+        AtomicInteger invocationCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerSlashHandler("ping", ignored -> invocationCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(2, "ping", null, "42", "token-value", null, 1));
+        router.handleInteraction(interactionPayload(2, "ping", null, "43", "token-value-2", null, 1));
+
+        assertEquals(2, invocationCount.get());
+    }
+
+    @Test
+    void routesAutocompleteCaseInsensitively() throws Exception {
+        AtomicInteger autocompleteCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+        router.registerAutocompleteHandler("ECHO", ignored -> autocompleteCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(4, "echo", null, "42", "token-value", "he", null));
+
+        assertEquals(1, autocompleteCount.get());
+    }
+
     @Test
     void routesTypedSlashCommandWithContextAndTypedParameters() throws Exception {
         AtomicReference<String> commandName = new AtomicReference<>();
@@ -487,19 +544,20 @@ class SlashCommandRouterTest {
     }
 
     @Test
-    void duplicateHandlerRegistrationOverridesPreviousHandler() throws Exception {
+    void duplicateHandlerRegistrationFailsFast() {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });
-        AtomicInteger firstCount = new AtomicInteger(0);
-        AtomicInteger secondCount = new AtomicInteger(0);
 
-        router.registerSlashHandler("ping", ignored -> firstCount.incrementAndGet());
-        router.registerSlashHandler("ping", ignored -> secondCount.incrementAndGet());
+        router.registerSlashHandler("ping", ignored -> {
+        });
 
-        router.handleInteraction(interactionPayload(2, "ping", null, "1", "token", null, 1));
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> router.registerSlashHandler("ping", ignored -> {
+                })
+        );
 
-        assertEquals(0, firstCount.get());
-        assertEquals(1, secondCount.get());
+        assertTrue(exception.getMessage().contains("already registered"));
     }
 
 
