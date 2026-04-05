@@ -43,20 +43,11 @@ void main() throws Exception {
                         "Echo input text back",
                         List.of(SlashCommandOptionDefinition.autocompletedString("text", "Text to echo", true))
                 ),
-                new SlashCommandDefinition(
-                        "echo_typed",
-                        "Echo input text back with typed handler",
-                        List.of(SlashCommandOptionDefinition.string("text", "Text to echo", true))
-                ),
                 SlashCommandDefinition.userContextMenu("Inspect User"),
                 SlashCommandDefinition.messageContextMenu("Quote Message")
         );
 
-        if (guildId == null || guildId.isBlank()) {
-            client.syncGlobalSlashCommands(commands);
-        } else {
-            client.syncGuildSlashCommands(guildId, commands);
-        }
+        client.syncGuildSlashCommands(guildId,commands);
 
         client.on("READY", ReadyEvent.class, ready ->
                 System.out.println("Gateway ready, session " + ready.sessionId()));
@@ -110,23 +101,11 @@ void main() throws Exception {
                             .withComponents(List.of(selectMenuRow)));
         });
 
-        client.onSlashCommand("echo", interaction -> {
-            String text = client.getStringOption(interaction, "text");
-            if (text == null || text.isBlank()) {
-                client.respondEphemeral(interaction, "Missing required option: text");
-                return;
-            }
-
-            client.respondWithEmbeds(interaction, text, List.of(
-                    new DiscordEmbed("Echo", text, 0xFEE75C)
-                            .withUrl("https://discord.com/developers/docs")
-            ));
-        });
 
         client.onAutocomplete("echo", interaction -> {
             String prefix = client.getStringOption(interaction, "text");
             String safePrefix = prefix == null ? "" : prefix.toLowerCase();
-            List<AutocompleteChoice> choices = List.of("hello", "hey", "hola", "bonjour").stream()
+            List<AutocompleteChoice> choices = Stream.of("hello", "hey", "hola", "bonjour")
                     .filter(choice -> choice.startsWith(safePrefix))
                     .limit(25)
                     .map(choice -> new AutocompleteChoice(choice, choice))
@@ -153,7 +132,7 @@ void main() throws Exception {
                                 .withThumbnail("https://cdn.discordapp.com/embed/avatars/1.png")
                 )));
 
-        client.onSlashCommandContext("echo_typed", interaction -> {
+        client.onSlashCommandContext("echo", interaction -> {
             String text = interaction.parameters().getString("text");
             if (text == null || text.isBlank()) {
                 client.respondEphemeral(interaction.context(), "Missing required option: text");
