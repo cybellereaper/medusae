@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -80,6 +81,19 @@ public final class DiscordRestClient {
         return request("POST", "/applications/" + applicationId + "/commands", command.toRequestPayload());
     }
 
+    public JsonNode bulkOverwriteGlobalApplicationCommands(String applicationId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(applicationId, "applicationId");
+        Objects.requireNonNull(commands, "commands");
+        return request("PUT", "/applications/" + applicationId + "/commands", toCommandPayload(commands));
+    }
+
+    public JsonNode bulkOverwriteGuildApplicationCommands(String applicationId, String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(applicationId, "applicationId");
+        requireNonBlank(guildId, "guildId");
+        Objects.requireNonNull(commands, "commands");
+        return request("PUT", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", toCommandPayload(commands));
+    }
+
     public JsonNode request(String method, String path, Object body) {
         String routeKey = method + " " + path;
         String bucketId = routeToBucket.getOrDefault(routeKey, routeKey);
@@ -128,6 +142,13 @@ public final class DiscordRestClient {
         if (value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
         }
+    }
+
+    private static List<Map<String, Object>> toCommandPayload(List<SlashCommandDefinition> commands) {
+        return commands.stream()
+                .peek(command -> Objects.requireNonNull(command, "command"))
+                .map(SlashCommandDefinition::toRequestPayload)
+                .toList();
     }
 
     private HttpRequest buildRequest(String method, String path, Object body) {

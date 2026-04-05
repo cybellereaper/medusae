@@ -6,6 +6,7 @@ import com.github.cybellereaper.client.SlashCommandDefinition;
 import org.junit.jupiter.api.Test;
 
 import java.net.http.HttpClient;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -29,6 +30,22 @@ class DiscordRestClientTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> restClient.createGlobalApplicationCommand("", SlashCommandDefinition.simple("ping", "Pong"))
+        );
+    }
+
+    @Test
+    void rejectsBlankApplicationIdForBulkGlobalOverwrite() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> restClient.bulkOverwriteGlobalApplicationCommands(" ", List.of())
+        );
+    }
+
+    @Test
+    void rejectsBlankGuildIdForBulkGuildOverwrite() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> restClient.bulkOverwriteGuildApplicationCommands("app-id", "", List.of())
         );
     }
 }

@@ -155,6 +155,15 @@ public final class DiscordClient implements AutoCloseable {
         registerCommands(commands, this::registerGlobalSlashCommand);
     }
 
+    public void syncGlobalSlashCommands(List<SlashCommandDefinition> commands) {
+        Objects.requireNonNull(commands, "commands");
+        restClient.bulkOverwriteGlobalApplicationCommands(resolveApplicationId(), commands);
+    }
+
+    public void registerAndSyncGlobalCommands(List<CommandRegistration> commands) {
+        registerAndSyncCommands(commands, this::syncGlobalSlashCommands);
+    }
+
     public JsonNode registerGuildSlashCommand(String guildId, String commandName, String description) {
         return registerGuildSlashCommand(guildId, SlashCommandDefinition.simple(commandName, description));
     }
@@ -177,6 +186,17 @@ public final class DiscordClient implements AutoCloseable {
     public void registerGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
         requireNonBlank(guildId, "guildId");
         registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
+    }
+
+    public void syncGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(guildId, "guildId");
+        Objects.requireNonNull(commands, "commands");
+        restClient.bulkOverwriteGuildApplicationCommands(resolveApplicationId(), guildId, commands);
+    }
+
+    public void registerAndSyncGuildCommands(String guildId, List<CommandRegistration> commands) {
+        requireNonBlank(guildId, "guildId");
+        registerAndSyncCommands(commands, definitions -> syncGuildSlashCommands(guildId, definitions));
     }
 
     public void respondWithMessage(JsonNode interaction, String content) {
@@ -302,6 +322,22 @@ public final class DiscordClient implements AutoCloseable {
         for (SlashCommandDefinition command : commands) {
             registrar.accept(command);
         }
+    }
+
+    private void registerAndSyncCommands(List<CommandRegistration> commands, Consumer<List<SlashCommandDefinition>> synchronizer) {
+        Objects.requireNonNull(commands, "commands");
+        Objects.requireNonNull(synchronizer, "synchronizer");
+
+        List<SlashCommandDefinition> definitions = commands.stream()
+                .peek(command -> Objects.requireNonNull(command, "command"))
+                .map(CommandRegistration::definition)
+                .toList();
+
+        for (CommandRegistration command : commands) {
+            command.registerHandlers(this);
+        }
+
+        synchronizer.accept(definitions);
     }
 
     private String resolveApplicationId() {
