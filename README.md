@@ -1,4 +1,4 @@
-# Jellycord
+# Jellycord (This is experimental)
 
 Jellycord is a lightweight Java client for building Discord bots using both the Gateway and REST APIs.
 
