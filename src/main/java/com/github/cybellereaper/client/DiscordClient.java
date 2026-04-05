@@ -15,6 +15,7 @@ public final class DiscordClient implements AutoCloseable {
     private final DiscordRestClient restClient;
     private final DiscordGatewayClient gatewayClient;
     private final SlashCommandRouter slashCommandRouter;
+    private final DiscordApi api;
 
     private volatile String applicationId;
 
@@ -22,6 +23,7 @@ public final class DiscordClient implements AutoCloseable {
         this.restClient = restClient;
         this.gatewayClient = gatewayClient;
         this.slashCommandRouter = new SlashCommandRouter(restClient::createInteractionResponse);
+        this.api = new DiscordApi(restClient);
         this.gatewayClient.on("INTERACTION_CREATE", slashCommandRouter::handleInteraction);
     }
 
@@ -88,6 +90,10 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerModalHandler(customId, listener);
     }
 
+
+    public DiscordApi api() {
+        return api;
+    }
     public JsonNode registerGlobalSlashCommand(String commandName, String description) {
         return registerGlobalSlashCommand(SlashCommandDefinition.simple(commandName, description));
     }
