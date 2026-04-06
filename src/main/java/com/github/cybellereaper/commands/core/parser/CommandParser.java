@@ -42,6 +42,20 @@ public final class CommandParser {
             throw new RegistrationException("No command handlers were found for " + type.getName());
         }
 
+
+        handlers.sort((left, right) -> {
+            String leftKey = left.routeKey();
+            String rightKey = right.routeKey();
+            int leftRank = leftKey == null ? 2 : (leftKey.contains("/") ? 0 : 1);
+            int rightRank = rightKey == null ? 2 : (rightKey.contains("/") ? 0 : 1);
+            if (leftRank != rightRank) {
+                return Integer.compare(leftRank, rightRank);
+            }
+            String leftValue = leftKey == null ? "" : leftKey;
+            String rightValue = rightKey == null ? "" : rightKey;
+            return leftValue.compareTo(rightValue);
+        });
+
         validateHandlers(command, handlers);
 
         return new CommandDefinition(

@@ -165,3 +165,19 @@ client.sendMessageWithAttachments(
 ```bash
 ./gradlew test
 ```
+
+
+## Interaction + Event Framework (new)
+
+Jellycord now includes an annotation-first interaction and event subsystem:
+
+- Interaction module: `com.github.cybellereaper.interactions.*`
+  - Button/select/modal routing with template custom IDs and typed binding
+  - Response builders for reply/defer/update/modal/follow-up flows
+  - Session registry for scoped multi-step interaction workflows
+- Event module: `com.github.cybellereaper.events.*`
+  - Typed listener registration with deterministic ordering
+  - Filter hooks, once/async options, and intent diagnostics
+  - Discord gateway adapter and typed mapped event records
+
+See [`docs-interaction-event-framework.md`](docs-interaction-event-framework.md) and examples in `src/main/java/com/github/cybellereaper/examples/interactions` + `.../examples/events`.
