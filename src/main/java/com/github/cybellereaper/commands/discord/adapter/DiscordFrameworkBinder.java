@@ -2,6 +2,7 @@ package com.github.cybellereaper.commands.discord.adapter;
 
 import com.github.cybellereaper.client.DiscordClient;
 import com.github.cybellereaper.commands.core.execute.CommandFramework;
+import com.github.cybellereaper.commands.core.interaction.UiHandlerType;
 import com.github.cybellereaper.commands.core.model.CommandDefinition;
 import com.github.cybellereaper.commands.core.model.CommandType;
 
@@ -29,6 +30,7 @@ public final class DiscordFrameworkBinder {
         Objects.requireNonNull(dispatcher, "dispatcher");
 
         framework.registry().all().forEach(definition -> registerDefinition(client, dispatcher, definition));
+        framework.uiRegistry().all().forEach(handler -> registerUiHandler(client, dispatcher, handler.type(), handler.route().template()));
     }
 
     static boolean requiresAutocompleteRegistration(CommandDefinition definition) {
@@ -47,6 +49,14 @@ public final class DiscordFrameworkBinder {
             }
             case USER_CONTEXT -> client.onUserContextMenuContext(definition.name(), context -> dispatcher.dispatch(context.raw(), context));
             case MESSAGE_CONTEXT -> client.onMessageContextMenuContext(definition.name(), context -> dispatcher.dispatch(context.raw(), context));
+        }
+    }
+
+    private static void registerUiHandler(DiscordClient client, DiscordCommandDispatcher dispatcher, UiHandlerType type, String routeTemplate) {
+        switch (type) {
+            case MODAL -> client.onModalSubmitContext(routeTemplate, context -> dispatcher.dispatchComponent(UiHandlerType.MODAL, context.raw(), context));
+            case BUTTON, STRING_SELECT, USER_SELECT, ROLE_SELECT, MENTIONABLE_SELECT, CHANNEL_SELECT ->
+                    client.onComponentInteractionContext(routeTemplate, context -> dispatcher.dispatchComponent(type, context.raw(), context));
         }
     }
 

@@ -21,6 +21,8 @@ final class SlashCommandRouter {
     private final Map<String, Consumer<InteractionContext>> messageContextMenuHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<InteractionContext>> componentHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<InteractionContext>> modalHandlers = new ConcurrentHashMap<>();
+    private final List<RouteHandler> componentTemplateHandlers = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<RouteHandler> modalTemplateHandlers = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final Map<String, Consumer<InteractionContext>> autocompleteHandlers = new ConcurrentHashMap<>();
     private final InteractionResponder responder;
 
@@ -63,11 +65,11 @@ final class SlashCommandRouter {
     }
 
     void registerComponentContextHandler(String customId, InteractionHandler handler) {
-        registerUniqueHandler(componentHandlers, customId, "component", handler::handle);
+        registerRouteAwareHandler(componentHandlers, componentTemplateHandlers, customId, "component", handler::handle);
     }
 
     void registerModalContextHandler(String customId, InteractionHandler handler) {
-        registerUniqueHandler(modalHandlers, customId, "modal", handler::handle);
+        registerRouteAwareHandler(modalHandlers, modalTemplateHandlers, customId, "modal", handler::handle);
     }
 
     void registerAutocompleteContextHandler(String commandName, InteractionHandler handler) {
@@ -92,8 +94,8 @@ final class SlashCommandRouter {
             case PING -> respond(interaction, ResponseType.PONG, null);
             case APPLICATION_COMMAND -> handleApplicationCommand(interaction);
             case APPLICATION_COMMAND_AUTOCOMPLETE -> dispatchByDataField(interaction, autocompleteHandlers, DataField.NAME);
-            case MESSAGE_COMPONENT -> dispatchByDataField(interaction, componentHandlers, DataField.CUSTOM_ID);
-            case MODAL_SUBMIT -> dispatchByDataField(interaction, modalHandlers, DataField.CUSTOM_ID);
+            case MESSAGE_COMPONENT -> dispatchByDataField(interaction, componentHandlers, componentTemplateHandlers, DataField.CUSTOM_ID);
+            case MODAL_SUBMIT -> dispatchByDataField(interaction, modalHandlers, modalTemplateHandlers, DataField.CUSTOM_ID);
             case UNKNOWN -> {
                 // Unknown interaction types are intentionally ignored.
             }
@@ -172,6 +174,26 @@ final class SlashCommandRouter {
         }
     }
 
+    private void dispatchByDataField(
+            JsonNode interaction,
+            Map<String, Consumer<InteractionContext>> handlers,
+            List<RouteHandler> routeHandlers,
+            DataField dataField
+    ) {
+        String handlerKey = interaction.path(DATA_FIELD).path(dataField.value()).asText("").trim();
+        Consumer<InteractionContext> exact = handlers.get(handlerKey);
+        if (exact != null) {
+            exact.accept(InteractionContext.from(interaction, responder));
+            return;
+        }
+        for (RouteHandler routeHandler : routeHandlers) {
+            if (routeHandler.matches(handlerKey)) {
+                routeHandler.handler.accept(InteractionContext.from(interaction, responder));
+                return;
+            }
+        }
+    }
+
     private void respond(JsonNode interaction, ResponseType responseType, Map<String, Object> data) {
         Objects.requireNonNull(interaction, "interaction");
 
@@ -197,6 +219,77 @@ final class SlashCommandRouter {
         Consumer<InteractionContext> previous = handlers.putIfAbsent(normalizedKey, handler);
         if (previous != null) {
             throw new IllegalArgumentException("Interaction handler already registered for " + handlerType + ": " + normalizedKey);
+        }
+    }
+
+    private static void registerRouteAwareHandler(
+            Map<String, Consumer<InteractionContext>> handlers,
+            List<RouteHandler> routeHandlers,
+            String key,
+            String handlerType,
+            Consumer<InteractionContext> handler
+    ) {
+        String normalizedKey = validateKey(key, handlerType);
+        if (normalizedKey.contains("{") && normalizedKey.contains("}")) {
+            RouteHandler routeHandler = RouteHandler.compile(normalizedKey, handler);
+            boolean conflict = routeHandlers.stream().anyMatch(existing -> existing.conflicts(routeHandler));
+            if (conflict) {
+                throw new IllegalArgumentException("Interaction handler already registered for " + handlerType + " route: " + normalizedKey);
+            }
+            routeHandlers.add(routeHandler);
+            return;
+        }
+        registerUniqueHandler(handlers, normalizedKey, handlerType, handler);
+    }
+
+    private static final class RouteHandler {
+        private final String template;
+        private final String[] segments;
+        private final boolean[] parameter;
+        private final Consumer<InteractionContext> handler;
+
+        private RouteHandler(String template, String[] segments, boolean[] parameter, Consumer<InteractionContext> handler) {
+            this.template = template;
+            this.segments = segments;
+            this.parameter = parameter;
+            this.handler = handler;
+        }
+
+        private static RouteHandler compile(String template, Consumer<InteractionContext> handler) {
+            String[] segments = template.split(":");
+            boolean[] parameter = new boolean[segments.length];
+            for (int i = 0; i < segments.length; i++) {
+                String current = segments[i];
+                if (current.startsWith("{") && current.endsWith("}")) {
+                    parameter[i] = true;
+                }
+            }
+            return new RouteHandler(template, segments, parameter, handler);
+        }
+
+        private boolean matches(String customId) {
+            String[] input = customId.split(":");
+            if (input.length != segments.length) {
+                return false;
+            }
+            for (int i = 0; i < input.length; i++) {
+                if (!parameter[i] && !segments[i].equals(input[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private boolean conflicts(RouteHandler other) {
+            if (segments.length != other.segments.length) {
+                return false;
+            }
+            for (int i = 0; i < segments.length; i++) {
+                if (!parameter[i] && !other.parameter[i] && !segments[i].equals(other.segments[i])) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 

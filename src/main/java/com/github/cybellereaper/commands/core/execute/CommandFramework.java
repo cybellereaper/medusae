@@ -7,17 +7,30 @@ import com.github.cybellereaper.commands.core.exception.CommandNotFoundException
 import com.github.cybellereaper.commands.core.exception.RegistrationException;
 import com.github.cybellereaper.commands.core.exception.ResolutionException;
 import com.github.cybellereaper.commands.core.model.*;
+import com.github.cybellereaper.commands.core.interaction.UiHandler;
+import com.github.cybellereaper.commands.core.interaction.UiHandlerRegistry;
+import com.github.cybellereaper.commands.core.interaction.UiParameter;
+import com.github.cybellereaper.commands.core.interaction.UiHandlerType;
 import com.github.cybellereaper.commands.core.parser.CommandParser;
+import com.github.cybellereaper.commands.core.parser.UiHandlerParser;
 import com.github.cybellereaper.commands.core.registry.CommandRegistry;
 import com.github.cybellereaper.commands.core.resolve.ParameterResolver;
 import com.github.cybellereaper.commands.core.resolve.ResolverRegistry;
 import com.github.cybellereaper.commands.core.response.CommandResponse;
+import com.github.cybellereaper.commands.core.response.ImmediateResponse;
+import com.github.cybellereaper.commands.discord.context.ComponentContext;
+import com.github.cybellereaper.commands.discord.context.InteractionContextBase;
+import com.github.cybellereaper.commands.discord.context.ModalContext;
+import com.github.cybellereaper.client.InteractionContext;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 public final class CommandFramework {
     private final CommandRegistry commandRegistry = new CommandRegistry();
@@ -26,13 +39,18 @@ public final class CommandFramework {
     private final AutocompleteRegistry autocompleteRegistry = new AutocompleteRegistry();
     private final CooldownManager cooldownManager = new CooldownManager();
     private final CommandParser commandParser = new CommandParser();
+    private final UiHandlerParser uiHandlerParser = new UiHandlerParser();
+    private final UiHandlerRegistry uiHandlerRegistry = new UiHandlerRegistry();
     private CommandExceptionHandler exceptionHandler = CommandExceptionHandler.rethrowing();
 
     public void registerCommands(Object... handlers) {
         for (Object handler : handlers) {
-            CommandDefinition parsed = commandParser.parse(handler);
-            validateChecks(parsed);
-            commandRegistry.register(parsed);
+            if (handler.getClass().isAnnotationPresent(com.github.cybellereaper.commands.core.annotation.Command.class)) {
+                CommandDefinition parsed = commandParser.parse(handler);
+                validateChecks(parsed);
+                commandRegistry.register(parsed);
+            }
+            uiHandlerParser.parse(handler).forEach(uiHandlerRegistry::register);
         }
     }
 
@@ -104,14 +122,64 @@ public final class CommandFramework {
             Object result = handler.method().invoke(handler.instance(), args);
             if (result instanceof CommandResponse response) {
                 responder.accept(response);
+            } else if (result instanceof String content) {
+                responder.accept(ImmediateResponse.publicMessage(content));
             }
         } catch (Throwable throwable) {
             exceptionHandler.onException(context, unwrap(throwable));
         }
     }
 
+    public void executeComponent(UiHandlerType type, String customId, JsonNode rawInteraction, InteractionContext interactionContext, CommandResponder responder) {
+        Objects.requireNonNull(type, "type");
+        Objects.requireNonNull(customId, "customId");
+        Objects.requireNonNull(interactionContext, "interactionContext");
+        Objects.requireNonNull(responder, "responder");
+
+        UiHandlerRegistry.ResolvedUiHandler resolved = uiHandlerRegistry.resolve(type, customId)
+                .orElseThrow(() -> new CommandNotFoundException("Unknown component route: " + customId));
+
+        CommandInteraction guardInteraction = new CommandInteraction(
+                interactionContext.commandName(),
+                CommandType.CHAT_INPUT,
+                null,
+                null,
+                Map.of(),
+                null,
+                rawInteraction,
+                interactionContext.guildId() == null,
+                interactionContext.guildId(),
+                interactionContext.userId(),
+                Set.of(),
+                Set.of(),
+                null, null, null, null, null, null
+        );
+        CommandContext checkContext = new CommandContext(guardInteraction, responder);
+        enforceUiGuards(checkContext, resolved.handler());
+
+        InteractionContextBase context = resolved.handler().type() == UiHandlerType.MODAL
+                ? new ModalContext(interactionContext, rawInteraction, resolved.pathParams())
+                : new ComponentContext(interactionContext, rawInteraction, resolved.pathParams());
+
+        Object[] args = resolveUiParameters(context, resolved.handler(), rawInteraction);
+        try {
+            Object result = resolved.handler().method().invoke(resolved.handler().instance(), args);
+            if (result instanceof CommandResponse response) {
+                responder.accept(response);
+            } else if (result instanceof String content) {
+                responder.accept(ImmediateResponse.publicMessage(content));
+            }
+        } catch (IllegalAccessException | InvocationTargetException exception) {
+            throw new ResolutionException("Failed to invoke UI handler: " + resolved.handler().method(), unwrap(exception));
+        }
+    }
+
     public CommandRegistry registry() {
         return commandRegistry;
+    }
+
+    public UiHandlerRegistry uiRegistry() {
+        return uiHandlerRegistry;
     }
 
     private static Throwable unwrap(Throwable throwable) {
@@ -182,6 +250,38 @@ public final class CommandFramework {
         };
     }
 
+    private void enforceUiGuards(CommandContext context, UiHandler handler) {
+        if (!context.interaction().userPermissions().containsAll(handler.requiredUserPermissions())) {
+            throw new CheckFailedException("Missing user permissions: " + handler.requiredUserPermissions());
+        }
+        for (String checkId : handler.checks()) {
+            boolean result = checkRegistry.find(checkId)
+                    .orElseThrow(() -> new RegistrationException("Unknown check id '" + checkId + "'"))
+                    .test(context);
+            if (!result) {
+                throw new CheckFailedException("Check failed: " + checkId);
+            }
+        }
+    }
+
+    private Object[] resolveUiParameters(InteractionContextBase context, UiHandler handler, JsonNode rawInteraction) {
+        Object[] args = new Object[handler.parameters().size()];
+        for (UiParameter parameter : handler.parameters()) {
+            args[parameter.index()] = switch (parameter.kind()) {
+                case COMPONENT_CONTEXT -> context instanceof ComponentContext cc ? cc : context;
+                case MODAL_CONTEXT -> context instanceof ModalContext mc ? mc : context;
+                case BASE_CONTEXT -> context;
+                case RAW_INTERACTION -> rawInteraction;
+                case PATH_PARAM -> convertString(context.pathParams().get(parameter.bindingKey()), parameter.targetType(), null);
+                case FIELD -> context instanceof ModalContext modalContext
+                        ? convertString(modalContext.fieldValue(parameter.bindingKey()), parameter.targetType(), null)
+                        : null;
+                case CUSTOM -> throw new ResolutionException("No resolver available for custom UI parameter: " + parameter.targetType().getName());
+            };
+        }
+        return args;
+    }
+
     private Object resolveOption(Class<?> type, CommandInteraction interaction, CommandParameter parameter) {
         CommandOptionValue option = interaction.options().get(parameter.optionName());
         if (option == null || option.value() == null) {
@@ -243,6 +343,12 @@ public final class CommandFramework {
         return optionTargets.get(optionName);
     }
     private static Object convertString(String value, Class<?> type, CommandParameter parameter) {
+        if (value == null) {
+            if (type.isPrimitive()) {
+                return primitiveDefault(type);
+            }
+            return null;
+        }
         try {
             if (type == String.class) {
                 return value;
@@ -265,7 +371,8 @@ public final class CommandFramework {
                 return enumValue;
             }
         } catch (Exception exception) {
-            throw new ResolutionException("Failed to convert option '" + parameter.optionName() + "' value: " + value, exception);
+            String optionName = parameter == null ? "<interaction>" : parameter.optionName();
+            throw new ResolutionException("Failed to convert option '" + optionName + "' value: " + value, exception);
         }
         throw new ResolutionException("Unsupported option type: " + type.getName());
     }

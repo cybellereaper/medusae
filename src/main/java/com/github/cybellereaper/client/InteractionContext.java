@@ -287,6 +287,11 @@ public final class InteractionContext {
         respond(6, null);
     }
 
+    public void updateMessage(DiscordMessage message) {
+        Objects.requireNonNull(message, "message");
+        respond(7, message.toPayload());
+    }
+
     private void respond(int type, Map<String, Object> data) {
         String interactionId = id();
         String interactionToken = token();

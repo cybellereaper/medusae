@@ -5,6 +5,7 @@ import com.github.cybellereaper.client.AutocompleteChoice;
 import com.github.cybellereaper.client.InteractionContext;
 import com.github.cybellereaper.commands.core.execute.CommandFramework;
 import com.github.cybellereaper.commands.core.execute.CommandResponder;
+import com.github.cybellereaper.commands.core.interaction.UiHandlerType;
 import com.github.cybellereaper.commands.discord.response.DiscordResponseApplier;
 
 import java.util.List;
@@ -50,6 +51,26 @@ public final class DiscordCommandDispatcher {
             interactionContext.respondWithAutocompleteChoices(choices);
         } catch (RuntimeException exception) {
             interactionContext.respondWithAutocompleteChoices(List.of());
+            throw exception;
+        }
+    }
+
+    public void dispatchComponent(UiHandlerType type, JsonNode interaction, InteractionContext interactionContext) {
+        java.util.Objects.requireNonNull(type, "type");
+        java.util.Objects.requireNonNull(interaction, "interaction");
+        java.util.Objects.requireNonNull(interactionContext, "interactionContext");
+        var trackingResponder = new TrackingResponder(new DiscordResponseApplier(interactionContext));
+        String customId = interactionContext.customId();
+
+        try {
+            framework.executeComponent(type, customId, interaction, interactionContext, trackingResponder);
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(NO_RESPONSE_MESSAGE);
+            }
+        } catch (RuntimeException exception) {
+            if (!trackingResponder.responded()) {
+                interactionContext.respondEphemeral(GENERIC_ERROR_MESSAGE);
+            }
             throw exception;
         }
     }
