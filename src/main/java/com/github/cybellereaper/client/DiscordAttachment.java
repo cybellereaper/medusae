@@ -16,6 +16,7 @@ public record DiscordAttachment(String fileName, String contentType, byte[] cont
         if (contentType.isBlank()) {
             throw new IllegalArgumentException("contentType must not be blank");
         }
+        content = content.clone();
     }
 
     public static DiscordAttachment fromPath(Path path) {
@@ -30,5 +31,10 @@ public record DiscordAttachment(String fileName, String contentType, byte[] cont
         } catch (IOException exception) {
             throw new RuntimeException("Failed to read attachment from " + path, exception);
         }
+    }
+
+    @Override
+    public byte[] content() {
+        return content.clone();
     }
 }

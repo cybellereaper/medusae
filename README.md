@@ -158,6 +158,7 @@ client.sendMessageWithAttachments(
 
 - API reference: [`API.md`](API.md)
 - Annotation command framework details: [`docs-command-framework.md`](docs-command-framework.md)
+- Security hardening + `hardened_malloc` rollout notes: [`docs-security-hardening.md`](docs-security-hardening.md)
 - Examples: `src/main/java/com/github/cybellereaper/examples/commands`
 
 ## Running tests

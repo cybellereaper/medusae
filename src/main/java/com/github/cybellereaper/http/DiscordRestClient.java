@@ -8,6 +8,8 @@ import com.github.cybellereaper.client.SlashCommandDefinition;
 import com.github.cybellereaper.gateway.GatewayBotInfo;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -72,13 +74,13 @@ public final class DiscordRestClient {
     }
 
     public JsonNode sendMessage(String channelId, Map<String, Object> payload) {
-        requireNonBlank(channelId, "channelId");
+        requirePathSegment(channelId, "channelId");
         Objects.requireNonNull(payload, "payload");
         return request("POST", "/channels/" + channelId + "/messages", payload);
     }
 
     public JsonNode sendMessageWithAttachments(String channelId, Map<String, Object> payload, List<DiscordAttachment> attachments) {
-        requireNonBlank(channelId, "channelId");
+        requirePathSegment(channelId, "channelId");
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(attachments, "attachments");
 
@@ -104,19 +106,21 @@ public final class DiscordRestClient {
 
     public JsonNode createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
         validateCommandContext(applicationId, command);
-        requireNonBlank(guildId, "guildId");
+        requirePathSegment(guildId, "guildId");
 
         return request("POST", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", command.toRequestPayload());
     }
 
     public JsonNode createInteractionResponse(String interactionId, String interactionToken, int type, Map<String, Object> data) {
+        requirePathSegment(interactionId, "interactionId");
+        requireNonBlank(interactionToken, "interactionToken");
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", type);
         if (data != null && !data.isEmpty()) {
             payload.put("data", data);
         }
 
-        return request("POST", "/interactions/" + interactionId + "/" + interactionToken + "/callback", payload);
+        return request("POST", "/interactions/" + interactionId + "/" + encodePathSegment(interactionToken) + "/callback", payload);
     }
 
     public JsonNode createGlobalApplicationCommand(String applicationId, SlashCommandDefinition command) {
@@ -209,7 +213,7 @@ public final class DiscordRestClient {
     }
 
     private static void validateCommandContext(String applicationId, SlashCommandDefinition command) {
-        requireNonBlank(applicationId, "applicationId");
+        requirePathSegment(applicationId, "applicationId");
         Objects.requireNonNull(command, "command");
     }
 
@@ -218,6 +222,20 @@ public final class DiscordRestClient {
         if (value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
         }
+    }
+
+    private static void requirePathSegment(String value, String name) {
+        requireNonBlank(value, name);
+        boolean hasUnsafePathChar = value.chars().anyMatch(ch ->
+                Character.isISOControl(ch) || ch == '/' || ch == '\\' || ch == '?' || ch == '#'
+        );
+        if (hasUnsafePathChar) {
+            throw new IllegalArgumentException(name + " contains unsupported path characters");
+        }
+    }
+
+    private static String encodePathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private HttpRequest buildRequest(String method, String path, Object body) {

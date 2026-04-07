@@ -23,9 +23,20 @@ java {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.compilerArgs += ['-parameters']
+    options.compilerArgs += ['-parameters', '-Xlint:all']
+    options.encoding = 'UTF-8'
+
+    if (project.findProperty("strictCompile") == "true") {
+        options.compilerArgs += ['-Werror']
+    }
 }
 
 test {
     useJUnitPlatform()
+    jvmArgs '-ea'
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
 }

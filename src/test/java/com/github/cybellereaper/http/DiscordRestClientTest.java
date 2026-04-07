@@ -31,4 +31,20 @@ class DiscordRestClientTest {
                 () -> restClient.createGlobalApplicationCommand("", SlashCommandDefinition.simple("ping", "Pong"))
         );
     }
+
+    @Test
+    void rejectsNonNumericGuildIdForGuildCommandRegistration() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> restClient.createGuildApplicationCommand("123", "guild/../../", SlashCommandDefinition.simple("ping", "Pong"))
+        );
+    }
+
+    @Test
+    void rejectsUnsafePathCharactersInApplicationIdForGlobalCommandRegistration() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> restClient.createGlobalApplicationCommand("../app", SlashCommandDefinition.simple("ping", "Pong"))
+        );
+    }
 }
