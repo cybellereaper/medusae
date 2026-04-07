@@ -319,7 +319,7 @@ public final class CommandFramework {
         return wrappedOptional ? Optional.of(converted) : converted;
     }
 
-    private static Object resolveEntityParameter(Object contextTarget, Map<String, Object> optionTargets, String optionName) {
+    private static <T> T resolveEntityParameter(T contextTarget, Map<String, T> optionTargets, String optionName) {
         if (contextTarget != null) return contextTarget;
         if (optionName == null) return null;
         return optionTargets.get(optionName);

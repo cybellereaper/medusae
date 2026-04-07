@@ -64,7 +64,8 @@ public final class DiscordCommandDispatcher {
     public void dispatchComponent(JsonNode interaction, InteractionContext interactionContext) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
-        InteractionHandlerType type = switch (interaction.path("data").path("component_type").asInt()) {
+        Integer componentTypeCode = mapper.componentType(interaction);
+        InteractionHandlerType type = switch (componentTypeCode == null ? 0 : componentTypeCode) {
             case 2 -> InteractionHandlerType.BUTTON;
             case 3 -> InteractionHandlerType.STRING_SELECT;
             case 5 -> InteractionHandlerType.USER_SELECT;

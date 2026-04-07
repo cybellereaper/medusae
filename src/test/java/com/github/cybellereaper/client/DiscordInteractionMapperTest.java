@@ -61,8 +61,8 @@ class DiscordInteractionMapperTest {
         InteractionContext context = InteractionContext.from(node, (id, token, type, data) -> {});
         var interaction = mapper.toCoreInteraction(node, context);
 
-        ResolvedUser user = (ResolvedUser) interaction.optionUsers().get("target");
-        ResolvedMember member = (ResolvedMember) interaction.optionMembers().get("target");
+        ResolvedUser user = interaction.optionUsers().get("target");
+        ResolvedMember member = interaction.optionMembers().get("target");
 
         assertNotNull(user);
         assertEquals("tester", user.username());
@@ -102,5 +102,19 @@ class DiscordInteractionMapperTest {
             assertNotNull(interaction.optionUsers().get("target"));
             assertFalse(interaction.optionMembers().containsKey("target"));
         });
+    }
+
+    @Test
+    void handlesNullDataSafely() throws Exception {
+        DiscordInteractionMapper mapper = new DiscordInteractionMapper();
+        var node = new ObjectMapper().readTree("""
+                {"id":"1","token":"t","type":2}
+                """);
+        InteractionContext context = InteractionContext.from(node, (id, token, type, data) -> {});
+
+        var interaction = mapper.toCoreInteraction(node, context);
+
+        assertEquals("", interaction.commandName());
+        assertTrue(interaction.options().isEmpty());
     }
 }
