@@ -6,6 +6,7 @@ import com.github.cybellereaper.commands.core.execute.CommandFramework;
 import com.github.cybellereaper.commands.core.model.CommandInteraction;
 import com.github.cybellereaper.commands.core.model.CommandOptionValue;
 import com.github.cybellereaper.commands.core.model.CommandType;
+import com.github.cybellereaper.commands.core.model.ResolvedEntities;
 import com.github.cybellereaper.commands.core.response.ImmediateResponse;
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +81,7 @@ class CommandFrameworkExecutionTest {
                 "entities", CommandType.CHAT_INPUT, null, null,
                 Map.of(), null, Map.of(), false, "g1", "u1", Set.of(), Set.of(),
                 null, null, null, null, null, null,
+                ResolvedEntities.empty(),
                 Map.of("target", new com.github.cybellereaper.client.ResolvedUser("42", "tester", null, false)),
                 Map.of("target", new com.github.cybellereaper.client.ResolvedMember("42", "TesterNick")),
                 Map.of(), Map.of(), Map.of()

@@ -30,6 +30,7 @@ public record CommandInteraction(
         ResolvedRole targetRole,
         ResolvedAttachment targetAttachment,
         ResolvedMessage targetMessage,
+        ResolvedEntities resolved,
         Map<String, ResolvedUser> optionUsers,
         Map<String, ResolvedMember> optionMembers,
         Map<String, ResolvedChannel> optionChannels,
@@ -45,6 +46,7 @@ public record CommandInteraction(
         optionChannels = immutableWithoutNulls(optionChannels);
         optionRoles = immutableWithoutNulls(optionRoles);
         optionAttachments = immutableWithoutNulls(optionAttachments);
+        resolved = resolved == null ? ResolvedEntities.empty() : resolved;
     }
 
     public CommandInteraction(
@@ -69,7 +71,7 @@ public record CommandInteraction(
     ) {
         this(commandName, commandType, subcommandGroup, subcommand, options, focusedOption, rawInteraction, dm, guildId, userId,
                 userPermissions, botPermissions, targetUser, targetMember, targetChannel, targetRole, targetAttachment,
-                targetMessage, Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                targetMessage, ResolvedEntities.empty(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 
     public String routeKey() {

@@ -6,6 +6,7 @@ import com.github.cybellereaper.commands.core.interaction.context.ComponentConte
 import com.github.cybellereaper.commands.core.interaction.context.ModalContext;
 import com.github.cybellereaper.commands.core.model.InteractionExecution;
 import com.github.cybellereaper.commands.core.model.InteractionHandlerType;
+import com.github.cybellereaper.commands.core.model.ResolvedEntities;
 import com.github.cybellereaper.commands.core.response.*;
 import com.github.cybellereaper.commands.core.response.component.ActionRowSpec;
 import com.github.cybellereaper.commands.core.response.component.ButtonSpec;
@@ -30,7 +31,8 @@ class InteractionExecutionFlowTest {
                 InteractionHandlerType.BUTTON,
                 "ticket:create",
                 Map.of(),
-                Map.of(),
+                null,
+                ResolvedEntities.empty(),
                 true,
                 null,
                 "user-1",
@@ -45,7 +47,8 @@ class InteractionExecutionFlowTest {
                 InteractionHandlerType.MODAL,
                 "ticket:create",
                 Map.of("subject", "Need help", "details", "Details"),
-                Map.of(),
+                null,
+                ResolvedEntities.empty(),
                 true,
                 null,
                 "user-1",
@@ -70,7 +73,8 @@ class InteractionExecutionFlowTest {
                 InteractionHandlerType.BUTTON,
                 "plain:ok",
                 Map.of(),
-                Map.of(),
+                null,
+                ResolvedEntities.empty(),
                 true,
                 null,
                 "user-1",

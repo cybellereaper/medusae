@@ -2,6 +2,7 @@ package com.github.cybellereaper.commands.discord.adapter.payload;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,7 @@ public record DiscordInteractionPayload(
     public record Option(
             String name,
             Integer type,
-            Object value,
+            JsonNode value,
             Boolean focused,
             List<Option> options,
             Resolved resolved
@@ -49,12 +50,12 @@ public record DiscordInteractionPayload(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Resolved(
-            Map<String, Object> users,
-            Map<String, Object> members,
-            Map<String, Object> channels,
-            Map<String, Object> roles,
-            Map<String, Object> attachments,
-            Map<String, Object> messages
+            Map<String, JsonNode> users,
+            Map<String, JsonNode> members,
+            Map<String, JsonNode> channels,
+            Map<String, JsonNode> roles,
+            Map<String, JsonNode> attachments,
+            Map<String, JsonNode> messages
     ) {
     }
 }

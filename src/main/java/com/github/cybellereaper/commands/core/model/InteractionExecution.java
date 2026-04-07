@@ -8,6 +8,7 @@ public record InteractionExecution(
         String customId,
         Map<String, String> modalFields,
         Object rawInteraction,
+        ResolvedEntities resolved,
         boolean dm,
         String guildId,
         String userId,
@@ -17,6 +18,7 @@ public record InteractionExecution(
 ) {
     public InteractionExecution {
         modalFields = modalFields == null ? Map.of() : Map.copyOf(modalFields);
+        resolved = resolved == null ? ResolvedEntities.empty() : resolved;
         userPermissions = userPermissions == null ? java.util.Set.of() : java.util.Set.copyOf(userPermissions);
         botPermissions = botPermissions == null ? java.util.Set.of() : java.util.Set.copyOf(botPermissions);
     }

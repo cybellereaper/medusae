@@ -1,24 +1,27 @@
 package com.github.cybellereaper.commands.discord.adapter;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.client.*;
 import com.github.cybellereaper.commands.core.model.CommandInteraction;
 import com.github.cybellereaper.commands.core.model.CommandOptionValue;
 import com.github.cybellereaper.commands.core.model.CommandType;
+import com.github.cybellereaper.commands.core.model.ResolvedEntities;
 import com.github.cybellereaper.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.commands.discord.adapter.payload.DiscordInteractionPayloadReader;
+import com.github.cybellereaper.commands.discord.adapter.payload.DiscordOptionType;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 public final class DiscordInteractionMapper {
-    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
     private final DiscordInteractionPayloadReader payloadReader;
 
     public DiscordInteractionMapper() {
-        this(new DiscordInteractionPayloadReader(new com.fasterxml.jackson.databind.ObjectMapper()));
+        this(new DiscordInteractionPayloadReader(new ObjectMapper()));
     }
 
     DiscordInteractionMapper(DiscordInteractionPayloadReader payloadReader) {
@@ -33,16 +36,15 @@ public final class DiscordInteractionMapper {
 
     CommandInteraction toCoreInteraction(DiscordInteractionPayload interactionPayload, JsonNode rawInteraction, InteractionContext context) {
         var data = interactionPayload.data();
+        ResolvedEntities resolvedEntities = toResolvedEntities(data == null ? null : data.resolved());
         CommandType commandType = mapCommandType(orDefault(data == null ? null : data.type(), 1));
 
-        ParsedData parsed = parseOptions(data == null ? null : data.options(), data == null ? null : data.resolved(), new ParsedData());
+        ParsedData parsed = parseOptions(data == null ? null : data.options(), resolvedEntities, new ParsedData());
 
         String targetId = textOrNull(data == null ? null : data.targetId());
-        ResolvedUser targetUser = commandType == CommandType.USER_CONTEXT && targetId != null ? context.resolvedUserValue(targetId) : null;
-        ResolvedMember targetMember = commandType == CommandType.USER_CONTEXT && targetId != null ? context.resolvedMemberValue(targetId) : null;
-        ResolvedMessage targetMessage = commandType == CommandType.MESSAGE_CONTEXT && targetId != null
-                ? resolvedMessage(data == null ? null : data.resolved(), targetId)
-                : null;
+        ResolvedUser targetUser = commandType == CommandType.USER_CONTEXT ? resolvedEntities.users().get(targetId) : null;
+        ResolvedMember targetMember = commandType == CommandType.USER_CONTEXT ? resolvedEntities.members().get(targetId) : null;
+        ResolvedMessage targetMessage = commandType == CommandType.MESSAGE_CONTEXT ? resolvedEntities.messages().get(targetId) : null;
 
         return new CommandInteraction(
                 data == null ? "" : stringOrEmpty(data.name()),
@@ -63,6 +65,7 @@ public final class DiscordInteractionMapper {
                 null,
                 null,
                 targetMessage,
+                resolvedEntities,
                 parsed.optionUsers,
                 parsed.optionMembers,
                 parsed.optionChannels,
@@ -79,7 +82,7 @@ public final class DiscordInteractionMapper {
         };
     }
 
-    private static String focusedOption(java.util.List<DiscordInteractionPayload.Option> options) {
+    private static String focusedOption(List<DiscordInteractionPayload.Option> options) {
         if (options == null) {
             return null;
         }
@@ -95,43 +98,116 @@ public final class DiscordInteractionMapper {
         return null;
     }
 
-    private static ParsedData parseOptions(java.util.List<DiscordInteractionPayload.Option> nodes,
-                                           DiscordInteractionPayload.Resolved globalResolved,
-                                           ParsedData parsedData) {
+    private static ParsedData parseOptions(List<DiscordInteractionPayload.Option> nodes, ResolvedEntities globalResolved, ParsedData parsedData) {
         if (nodes == null) {
             return parsedData;
         }
 
         for (DiscordInteractionPayload.Option option : nodes) {
-            int type = orDefault(option.type(), 0);
+            int rawType = orDefault(option.type(), 0);
+            DiscordOptionType type = toOptionType(rawType);
             String name = textOrNull(option.name());
-            if (name == null) {
+            if (name == null || type == null) {
                 continue;
             }
 
-            if (type == 1) {
-                parsedData.subcommand = name;
-                parseOptions(option.options(), globalResolved, parsedData);
-                continue;
-            }
-            if (type == 2) {
-                parsedData.group = name;
-                var children = option.options();
-                if (children != null && !children.isEmpty()) {
-                    DiscordInteractionPayload.Option subcommandNode = children.get(0);
-                    parsedData.subcommand = textOrNull(subcommandNode.name());
-                    parseOptions(subcommandNode.options(), globalResolved, parsedData);
+            switch (type) {
+                case SUB_COMMAND -> {
+                    parsedData.subcommand = name;
+                    parseOptions(option.options(), globalResolved, parsedData);
                 }
-                continue;
+                case SUB_COMMAND_GROUP -> {
+                    parsedData.group = name;
+                    var children = option.options();
+                    if (children != null && !children.isEmpty()) {
+                        DiscordInteractionPayload.Option subcommandNode = children.get(0);
+                        parsedData.subcommand = textOrNull(subcommandNode.name());
+                        parseOptions(subcommandNode.options(), globalResolved, parsedData);
+                    }
+                }
+                case STRING, INTEGER, BOOLEAN, USER, CHANNEL, ROLE, MENTIONABLE, NUMBER, ATTACHMENT -> {
+                    Object value = parseOptionValue(type, option.value());
+                    parsedData.options.put(name, new CommandOptionValue(value, rawType));
+                    ResolvedEntities resolvedSource = option.resolved() == null ? globalResolved : toResolvedEntities(option.resolved());
+                    parsedData.collectResolvedEntities(name, type, value, resolvedSource);
+                }
             }
-
-            Object rawValue = option.value();
-            parsedData.options.put(name, new CommandOptionValue(rawValue, type));
-            var resolvedSource = option.resolved() == null ? globalResolved : option.resolved();
-            parsedData.collectResolvedEntities(name, type, rawValue, resolvedSource);
         }
 
         return parsedData;
+    }
+
+    private static DiscordOptionType toOptionType(int rawType) {
+        try {
+            return DiscordOptionType.fromCode(rawType);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static Object parseOptionValue(DiscordOptionType type, JsonNode rawValue) {
+        if (rawValue == null || rawValue.isNull() || rawValue.isMissingNode()) {
+            return null;
+        }
+        return switch (type) {
+            case STRING -> rawValue.asText();
+            case INTEGER -> parseLong(rawValue);
+            case BOOLEAN -> parseBoolean(rawValue);
+            case USER, CHANNEL, ROLE, MENTIONABLE, ATTACHMENT -> parseEntityId(rawValue);
+            case NUMBER -> parseDouble(rawValue);
+            case SUB_COMMAND, SUB_COMMAND_GROUP -> throw new IllegalStateException("Subcommand options do not expose scalar values");
+        };
+    }
+
+    private static String parseEntityId(JsonNode rawValue) {
+        if (rawValue.isTextual()) {
+            String value = rawValue.asText().trim();
+            return value.isEmpty() ? null : value;
+        }
+        if (rawValue.isIntegralNumber()) {
+            return Long.toString(rawValue.longValue());
+        }
+        return null;
+    }
+
+    private static Long parseLong(JsonNode rawValue) {
+        if (rawValue.isIntegralNumber()) {
+            return rawValue.longValue();
+        }
+        if (rawValue.isTextual()) {
+            try {
+                return Long.parseLong(rawValue.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Double parseDouble(JsonNode rawValue) {
+        if (rawValue.isNumber()) {
+            return rawValue.doubleValue();
+        }
+        if (rawValue.isTextual()) {
+            try {
+                return Double.parseDouble(rawValue.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Boolean parseBoolean(JsonNode rawValue) {
+        if (rawValue.isBoolean()) {
+            return rawValue.booleanValue();
+        }
+        if (rawValue.isTextual()) {
+            String text = rawValue.asText().trim();
+            if ("true".equalsIgnoreCase(text)) return true;
+            if ("false".equalsIgnoreCase(text)) return false;
+        }
+        return null;
     }
 
     private static String textOrNull(String text) {
@@ -148,31 +224,29 @@ public final class DiscordInteractionMapper {
         private final Map<String, ResolvedRole> optionRoles = new HashMap<>();
         private final Map<String, ResolvedAttachment> optionAttachments = new HashMap<>();
 
-        private void collectResolvedEntities(String optionName, int optionType, Object rawValue, DiscordInteractionPayload.Resolved resolved) {
-            String entityId = resolveEntityId(rawValue);
+        private void collectResolvedEntities(String optionName, DiscordOptionType optionType, Object value, ResolvedEntities resolved) {
+            String entityId = resolveEntityId(value);
             if (entityId == null) {
                 return;
             }
-
             switch (optionType) {
-                case 6 -> {
-                    ResolvedUser user = resolvedUser(resolved, entityId);
-                    ResolvedMember member = resolvedMember(resolved, entityId);
-                    putIfPresent(optionUsers, optionName, user);
-                    putIfPresent(optionMembers, optionName, member);
+                case USER -> {
+                    putIfPresent(optionUsers, optionName, resolved.users().get(entityId));
+                    putIfPresent(optionMembers, optionName, resolved.members().get(entityId));
                 }
-                case 7 -> putIfPresent(optionChannels, optionName,
-                        resolvedChannel(resolved, entityId));
-                case 8 -> putIfPresent(optionRoles, optionName,
-                        resolvedRole(resolved, entityId));
-                case 11 -> putIfPresent(optionAttachments, optionName,
-                        resolvedAttachment(resolved, entityId));
-                default -> {
-                    // not a resolved-entity option
+                case CHANNEL -> putIfPresent(optionChannels, optionName, resolved.channels().get(entityId));
+                case ROLE -> putIfPresent(optionRoles, optionName, resolved.roles().get(entityId));
+                case ATTACHMENT -> putIfPresent(optionAttachments, optionName, resolved.attachments().get(entityId));
+                case MENTIONABLE -> {
+                    putIfPresent(optionUsers, optionName, resolved.users().get(entityId));
+                    putIfPresent(optionMembers, optionName, resolved.members().get(entityId));
+                    putIfPresent(optionRoles, optionName, resolved.roles().get(entityId));
+                }
+                case STRING, INTEGER, BOOLEAN, NUMBER, SUB_COMMAND, SUB_COMMAND_GROUP -> {
+                    // no resolved entities for scalar options
                 }
             }
         }
-
 
         private static <T> void putIfPresent(Map<String, T> map, String key, T value) {
             if (key != null && value != null) {
@@ -191,15 +265,16 @@ public final class DiscordInteractionMapper {
         }
     }
 
-
     public com.github.cybellereaper.commands.core.model.InteractionExecution toComponentInteraction(JsonNode interaction, InteractionContext context, com.github.cybellereaper.commands.core.model.InteractionHandlerType type) {
         Objects.requireNonNull(type, "type");
         DiscordInteractionPayload payload = payloadReader.read(interaction);
+        ResolvedEntities resolvedEntities = toResolvedEntities(payload.data() == null ? null : payload.data().resolved());
         return new com.github.cybellereaper.commands.core.model.InteractionExecution(
                 type,
                 textOrNull(payload.data() == null ? null : payload.data().customId()),
                 Map.of(),
                 interaction,
+                resolvedEntities,
                 context.guildId() == null,
                 context.guildId(),
                 context.userId(),
@@ -227,11 +302,13 @@ public final class DiscordInteractionMapper {
         }
 
         String customId = textOrNull(payload.data() == null ? null : payload.data().customId());
+        ResolvedEntities resolvedEntities = toResolvedEntities(payload.data() == null ? null : payload.data().resolved());
         return new com.github.cybellereaper.commands.core.model.InteractionExecution(
                 com.github.cybellereaper.commands.core.model.InteractionHandlerType.MODAL,
                 customId,
                 fields,
                 interaction,
+                resolvedEntities,
                 context.guildId() == null,
                 context.guildId(),
                 context.userId(),
@@ -263,44 +340,70 @@ public final class DiscordInteractionMapper {
         return value == null ? "" : value;
     }
 
-    private static JsonNode mapNode(Map<String, Object> values, String id) {
-        if (values == null || id == null) {
-            return null;
+    private static ResolvedEntities toResolvedEntities(DiscordInteractionPayload.Resolved resolved) {
+        if (resolved == null) {
+            return ResolvedEntities.empty();
         }
-        Object value = values.get(id);
-        if (value == null) {
-            return null;
+        Map<String, ResolvedUser> users = convertUsers(resolved.users());
+        return new ResolvedEntities(
+                users,
+                convertMembers(resolved.members(), users),
+                convertRoles(resolved.roles()),
+                convertChannels(resolved.channels()),
+                convertMessages(resolved.messages()),
+                convertAttachments(resolved.attachments())
+        );
+    }
+
+    private static Map<String, ResolvedUser> convertUsers(Map<String, JsonNode> users) {
+        if (users == null || users.isEmpty()) return Map.of();
+        Map<String, ResolvedUser> converted = new HashMap<>();
+        users.forEach((id, node) -> putIfPresent(converted, id, ResolvedUser.from(node)));
+        return Map.copyOf(converted);
+    }
+
+    private static Map<String, ResolvedMember> convertMembers(Map<String, JsonNode> members, Map<String, ResolvedUser> users) {
+        if (members == null || members.isEmpty()) return Map.of();
+        Map<String, ResolvedMember> converted = new HashMap<>();
+        members.forEach((id, node) -> {
+            if (users.containsKey(id)) {
+                putIfPresent(converted, id, ResolvedMember.from(id, node));
+            }
+        });
+        return Map.copyOf(converted);
+    }
+
+    private static Map<String, ResolvedRole> convertRoles(Map<String, JsonNode> roles) {
+        if (roles == null || roles.isEmpty()) return Map.of();
+        Map<String, ResolvedRole> converted = new HashMap<>();
+        roles.forEach((id, node) -> putIfPresent(converted, id, ResolvedRole.from(node)));
+        return Map.copyOf(converted);
+    }
+
+    private static Map<String, ResolvedChannel> convertChannels(Map<String, JsonNode> channels) {
+        if (channels == null || channels.isEmpty()) return Map.of();
+        Map<String, ResolvedChannel> converted = new HashMap<>();
+        channels.forEach((id, node) -> putIfPresent(converted, id, ResolvedChannel.from(node)));
+        return Map.copyOf(converted);
+    }
+
+    private static Map<String, ResolvedMessage> convertMessages(Map<String, JsonNode> messages) {
+        if (messages == null || messages.isEmpty()) return Map.of();
+        Map<String, ResolvedMessage> converted = new HashMap<>();
+        messages.forEach((id, node) -> putIfPresent(converted, id, ResolvedMessage.from(node)));
+        return Map.copyOf(converted);
+    }
+
+    private static Map<String, ResolvedAttachment> convertAttachments(Map<String, JsonNode> attachments) {
+        if (attachments == null || attachments.isEmpty()) return Map.of();
+        Map<String, ResolvedAttachment> converted = new HashMap<>();
+        attachments.forEach((id, node) -> putIfPresent(converted, id, ResolvedAttachment.from(node)));
+        return Map.copyOf(converted);
+    }
+
+    private static <T> void putIfPresent(Map<String, T> target, String id, T value) {
+        if (id != null && value != null) {
+            target.put(id, value);
         }
-        return JSON.valueToTree(value);
-    }
-
-    private static ResolvedMessage resolvedMessage(DiscordInteractionPayload.Resolved resolved, String targetId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.messages(), targetId);
-        return node == null ? null : ResolvedMessage.from(node);
-    }
-
-    private static ResolvedUser resolvedUser(DiscordInteractionPayload.Resolved resolved, String entityId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.users(), entityId);
-        return node == null ? null : ResolvedUser.from(node);
-    }
-
-    private static ResolvedMember resolvedMember(DiscordInteractionPayload.Resolved resolved, String entityId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.members(), entityId);
-        return node == null ? null : ResolvedMember.from(entityId, node);
-    }
-
-    private static ResolvedChannel resolvedChannel(DiscordInteractionPayload.Resolved resolved, String entityId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.channels(), entityId);
-        return node == null ? null : ResolvedChannel.from(node);
-    }
-
-    private static ResolvedRole resolvedRole(DiscordInteractionPayload.Resolved resolved, String entityId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.roles(), entityId);
-        return node == null ? null : ResolvedRole.from(node);
-    }
-
-    private static ResolvedAttachment resolvedAttachment(DiscordInteractionPayload.Resolved resolved, String entityId) {
-        JsonNode node = mapNode(resolved == null ? null : resolved.attachments(), entityId);
-        return node == null ? null : ResolvedAttachment.from(node);
     }
 }
