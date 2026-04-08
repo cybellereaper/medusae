@@ -88,6 +88,12 @@ public final class CommandFramework {
         return null;
     }
 
+    private static CommandInteraction buildSyntheticInteraction(InteractionExecution interaction) {
+        return new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null, Map.of(), null,
+                interaction.rawInteraction(), interaction.dm(), interaction.guildId(), interaction.userId(),
+                interaction.userPermissions(), interaction.botPermissions(), null, null, null, null, null, null);
+    }
+
     private static String optionValue(CommandInteraction interaction, String option) {
         CommandOptionValue value = interaction.options().get(option);
         return value == null || value.value() == null ? "" : String.valueOf(value.value());
@@ -177,12 +183,10 @@ public final class CommandFramework {
                     .orElseThrow(() -> new CommandNotFoundException("Unknown subcommand route: " + interaction.routeKey()));
 
             enforceGuards(context, definition, handler);
-            cooldownManager.enforce(definition.name() + ":" + (handler.routeKey() == null ? "root" : handler.routeKey()),
-                    handler.cooldown() == null ? definition.cooldown() : handler.cooldown(), interaction);
+            applyCooldown(definition, handler, interaction);
 
             Object[] args = resolveParameters(context, handler);
-            Object result = handler.method().invoke(handler.instance(), args);
-            applyResult(responder, result);
+            invokeHandler(handler.instance(), handler.method(), args, false, false, false, responder);
         } catch (Throwable throwable) {
             exceptionHandler.onException(context, unwrap(throwable));
         }
@@ -204,19 +208,12 @@ public final class CommandFramework {
             };
 
             enforceGuards(context, handler);
-            cooldownManager.enforce("interaction:" + handler.type() + ":" + handler.route(), handler.cooldown(),
-                    new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null, Map.of(), null, interaction.rawInteraction(), interaction.dm(),
-                            interaction.guildId(), interaction.userId(), interaction.userPermissions(), interaction.botPermissions(), null, null, null, null, null, null));
+            applyCooldown(handler, interaction);
 
             Object[] args = resolveInteractionParameters(context, handler);
-            Object result = handler.method().invoke(handler.instance(), args);
-            Object normalized = (result == null && handler.deferReply()) ? InteractionReply.deferReply().ephemeral(handler.ephemeralDefault()).build()
-                    : (result == null && handler.deferUpdate()) ? InteractionReply.deferUpdate().build() : result;
-            applyResult(responder, normalized);
+            invokeHandler(handler.instance(), handler.method(), args, handler.deferReply(), handler.deferUpdate(), handler.ephemeralDefault(), responder);
         } catch (Throwable throwable) {
-            exceptionHandler.onException(new CommandContext(new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null,
-                    Map.of(), null, interaction.rawInteraction(), interaction.dm(), interaction.guildId(), interaction.userId(),
-                    interaction.userPermissions(), interaction.botPermissions(), null, null, null, null, null, null), responder), unwrap(throwable));
+            exceptionHandler.onException(new CommandContext(buildSyntheticInteraction(interaction), responder), unwrap(throwable));
         }
     }
 
@@ -262,10 +259,46 @@ public final class CommandFramework {
         if (!interaction.botPermissions().containsAll(handler.requiredBotPermissions())) {
             throw new CheckFailedException("Missing bot permissions: " + handler.requiredBotPermissions());
         }
-        runChecks(new CommandContext(new CommandInteraction("interaction", CommandType.CHAT_INPUT, null, null, Map.of(), null,
-                interaction.rawInteraction(), interaction.dm(), interaction.guildId(), interaction.userId(), interaction.userPermissions(),
-                interaction.botPermissions(), null, null, null, null, null, null), response -> {
+        runChecks(new CommandContext(buildSyntheticInteraction(interaction), response -> {
         }), handler.checks());
+    }
+
+    private void applyCooldown(CommandDefinition definition, CommandHandler handler, CommandInteraction interaction) {
+        applyCooldown(definition.name() + ":" + (handler.routeKey() == null ? "root" : handler.routeKey()),
+                handler.cooldown() == null ? definition.cooldown() : handler.cooldown(), interaction);
+    }
+
+    private void applyCooldown(InteractionHandler handler, InteractionExecution interaction) {
+        applyCooldown("interaction:" + handler.type() + ":" + handler.route(), handler.cooldown(), buildSyntheticInteraction(interaction));
+    }
+
+    private void applyCooldown(String routeKey, CooldownSpec cooldown, CommandInteraction interaction) {
+        cooldownManager.enforce(routeKey, cooldown, interaction);
+    }
+
+    private void invokeHandler(Object instance,
+                               java.lang.reflect.Method method,
+                               Object[] args,
+                               boolean deferReply,
+                               boolean deferUpdate,
+                               boolean ephemeralDefault,
+                               CommandResponder responder) throws InvocationTargetException, IllegalAccessException {
+        Object result = method.invoke(instance, args);
+        Object normalized = normalizeResult(result, deferReply, deferUpdate, ephemeralDefault);
+        applyResult(responder, normalized);
+    }
+
+    private static Object normalizeResult(Object result, boolean deferReply, boolean deferUpdate, boolean ephemeralDefault) {
+        if (result != null) {
+            return result;
+        }
+        if (deferReply) {
+            return InteractionReply.deferReply().ephemeral(ephemeralDefault).build();
+        }
+        if (deferUpdate) {
+            return InteractionReply.deferUpdate().build();
+        }
+        return null;
     }
 
     private void runChecks(CommandContext context, List<String> checks) {
