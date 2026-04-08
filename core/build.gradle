@@ -1,0 +1,9 @@
+dependencies {
+    implementation project(':commands-api')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation project(':commands-annotated')
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

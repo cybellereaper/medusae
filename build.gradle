@@ -1,31 +1,28 @@
 plugins {
-    id 'java'
+    id 'base'
 }
 
-group = 'com.github.cybellereaper'
-version = '1.0-SNAPSHOT'
+subprojects {
+    apply plugin: 'java'
 
-repositories {
-    mavenCentral()
-}
+    group = 'com.github.cybellereaper'
+    version = '1.0-SNAPSHOT'
 
-dependencies {
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
-    testImplementation platform('org.junit:junit-bom:5.12.2')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+    repositories {
+        mavenCentral()
     }
-}
 
-tasks.withType(JavaCompile).configureEach {
-    options.compilerArgs += ['-parameters']
-}
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
 
-test {
-    useJUnitPlatform()
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs += ['-parameters']
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
 }
