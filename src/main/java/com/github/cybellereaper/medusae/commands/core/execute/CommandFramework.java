@@ -21,6 +21,8 @@ import com.github.cybellereaper.medusae.commands.core.resolve.ResolverRegistry;
 import com.github.cybellereaper.medusae.commands.core.response.CommandResponse;
 import com.github.cybellereaper.medusae.commands.core.response.ImmediateResponse;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
+import com.github.cybellereaper.medusae.servicea.application.tenant.TenantBoundaryGuard;
+import com.github.cybellereaper.medusae.servicea.infrastructure.tenant.DefaultTenantBoundaryGuard;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -34,7 +36,16 @@ public final class CommandFramework {
     private final CooldownManager cooldownManager = new CooldownManager();
     private final CommandParser commandParser = new CommandParser();
     private final InteractionModuleParser interactionParser = new InteractionModuleParser();
+    private final TenantBoundaryGuard tenantBoundaryGuard;
     private CommandExceptionHandler exceptionHandler = CommandExceptionHandler.rethrowing();
+
+    public CommandFramework() {
+        this(new DefaultTenantBoundaryGuard());
+    }
+
+    public CommandFramework(TenantBoundaryGuard tenantBoundaryGuard) {
+        this.tenantBoundaryGuard = Objects.requireNonNull(tenantBoundaryGuard, "tenantBoundaryGuard");
+    }
 
     private static void applyResult(CommandResponder responder, Object result) {
         if (result instanceof CommandResponse response) {
@@ -219,6 +230,8 @@ public final class CommandFramework {
     }
 
     private void enforceGuards(CommandContext context, CommandDefinition definition, CommandHandler handler) {
+        tenantBoundaryGuard.enforceCommandBoundary(context.interaction());
+
         if (definition.guildOnly() && context.interaction().dm())
             throw new CheckFailedException("Command is guild-only");
         if (definition.dmOnly() && !context.interaction().dm()) throw new CheckFailedException("Command is DM-only");
@@ -242,6 +255,7 @@ public final class CommandFramework {
 
     private void enforceGuards(InteractionContext context, InteractionHandler handler) {
         InteractionExecution interaction = context.interaction();
+        tenantBoundaryGuard.enforceInteractionBoundary(interaction);
         InteractionSource source = interaction.dm() ? InteractionSource.DM : InteractionSource.GUILD;
         if (!handler.allowedSources().contains(source)) {
             throw new CheckFailedException("Interaction source not allowed: " + source);

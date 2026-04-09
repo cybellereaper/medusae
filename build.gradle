@@ -11,6 +11,7 @@ repositories {
 
 dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.18.2'
     testImplementation platform('org.junit:junit-bom:5.12.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -29,3 +30,28 @@ tasks.withType(JavaCompile).configureEach {
 test {
     useJUnitPlatform()
 }
+
+
+tasks.register('staticCheck') {
+    group = 'verification'
+    description = 'Fails on disallowed patterns that reduce production safety.'
+    doLast {
+        def violations = []
+        fileTree('src/main/java').matching {
+            include '**/*.java'
+            exclude '**/examples/**'
+        }.files.each { file ->
+            def lines = file.readLines('UTF-8')
+            lines.eachWithIndex { line, index ->
+                if (line.contains('System.out.println(')) {
+                    violations << "${file}:${index + 1} uses System.out.println"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("staticCheck failed:\n${violations.join('\n')}")
+        }
+    }
+}
+
+check.dependsOn(tasks.named('staticCheck'))
