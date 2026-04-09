@@ -21,6 +21,7 @@ import com.github.cybellereaper.medusae.commands.core.resolve.ResolverRegistry;
 import com.github.cybellereaper.medusae.commands.core.response.CommandResponse;
 import com.github.cybellereaper.medusae.commands.core.response.ImmediateResponse;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
+import com.github.cybellereaper.medusae.commands.core.tenant.TenantGuard;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -219,6 +220,8 @@ public final class CommandFramework {
     }
 
     private void enforceGuards(CommandContext context, CommandDefinition definition, CommandHandler handler) {
+        TenantGuard.requireGuildContext(context.interaction().dm(), context.interaction().guildId(), "command execution");
+
         if (definition.guildOnly() && context.interaction().dm())
             throw new CheckFailedException("Command is guild-only");
         if (definition.dmOnly() && !context.interaction().dm()) throw new CheckFailedException("Command is DM-only");
@@ -242,6 +245,7 @@ public final class CommandFramework {
 
     private void enforceGuards(InteractionContext context, InteractionHandler handler) {
         InteractionExecution interaction = context.interaction();
+        TenantGuard.requireGuildContext(interaction.dm(), interaction.guildId(), "interaction execution");
         InteractionSource source = interaction.dm() ? InteractionSource.DM : InteractionSource.GUILD;
         if (!handler.allowedSources().contains(source)) {
             throw new CheckFailedException("Interaction source not allowed: " + source);
