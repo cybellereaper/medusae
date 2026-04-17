@@ -55,7 +55,21 @@ class SlashCommandDefinitionTest {
         assertThrows(IllegalArgumentException.class, () -> SlashCommandDefinition.simple("ping", ""));
         assertThrows(IllegalArgumentException.class, () -> SlashCommandOptionDefinition.string("", "text", true));
         assertThrows(IllegalArgumentException.class,
-                () -> new SlashCommandDefinition(SlashCommandDefinition.USER, "menu", "desc", List.of(), null, null, null));
+                () -> new SlashCommandDefinition(SlashCommandDefinition.USER, "menu", "desc", List.of(), null, null, null, Map.of(), Map.of(), List.of()));
+    }
+
+    @Test
+    void supportsLocalizationsAndContextsInPayload() {
+        SlashCommandDefinition command = SlashCommandDefinition.simple("settings", "Settings")
+                .withNameLocalizations(Map.of("en-US", "Settings"))
+                .withDescriptionLocalizations(Map.of("en-US", "Manage settings"))
+                .withContexts(List.of(0, 2));
+
+        Map<String, Object> payload = command.toRequestPayload();
+
+        assertEquals(Map.of("en-US", "Settings"), payload.get("name_localizations"));
+        assertEquals(Map.of("en-US", "Manage settings"), payload.get("description_localizations"));
+        assertEquals(List.of(0, 2), payload.get("contexts"));
     }
 
     @Test

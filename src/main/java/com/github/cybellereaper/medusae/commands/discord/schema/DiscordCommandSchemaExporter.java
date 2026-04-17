@@ -22,11 +22,35 @@ public final class DiscordCommandSchemaExporter {
     }
 
     public SlashCommandDefinition exportDefinition(CommandDefinition definition) {
-        return switch (definition.type()) {
+        SlashCommandDefinition exported = switch (definition.type()) {
             case USER_CONTEXT -> SlashCommandDefinition.userContextMenu(definition.name());
             case MESSAGE_CONTEXT -> SlashCommandDefinition.messageContextMenu(definition.name());
             case CHAT_INPUT -> exportSlash(definition);
         };
+        return applyMetadata(exported, definition);
+    }
+
+    private SlashCommandDefinition applyMetadata(SlashCommandDefinition command, CommandDefinition definition) {
+        SlashCommandDefinition updated = command;
+        if (definition.defaultMemberPermissions() != null) {
+            updated = updated.withDefaultMemberPermissions(definition.defaultMemberPermissions());
+        }
+        if (definition.dmPermission() != null) {
+            updated = updated.withDmPermission(definition.dmPermission());
+        }
+        if (definition.nsfw() != null) {
+            updated = updated.withNsfw(definition.nsfw());
+        }
+        if (!definition.nameLocalizations().isEmpty()) {
+            updated = updated.withNameLocalizations(definition.nameLocalizations());
+        }
+        if (!definition.descriptionLocalizations().isEmpty()) {
+            updated = updated.withDescriptionLocalizations(definition.descriptionLocalizations());
+        }
+        if (!definition.contexts().isEmpty()) {
+            updated = updated.withContexts(definition.contexts().stream().map(it -> it.apiValue()).toList());
+        }
+        return updated;
     }
 
     private SlashCommandDefinition exportSlash(CommandDefinition definition) {

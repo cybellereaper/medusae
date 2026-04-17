@@ -131,6 +131,51 @@ public final class CommandParser {
         return Arrays.stream(values).map(CommandParser::normalizeName).toList();
     }
 
+    private static Map<String, String> annotationValues(Localization[] localizations) {
+        if (localizations == null || localizations.length == 0) {
+            return Map.of();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Localization localization : localizations) {
+            String locale = normalizeName(localization.locale());
+            String value = localization.value().trim();
+            if (value.isEmpty()) {
+                throw new RegistrationException("Localization value must not be blank for locale: " + locale);
+            }
+            if (result.put(locale, value) != null) {
+                throw new RegistrationException("Duplicate localization for locale: " + locale);
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, String> annotationValues(NameLocalizations annotation) {
+        return annotation == null ? Map.of() : annotationValues(annotation.value());
+    }
+
+    private static Map<String, String> annotationValues(DescriptionLocalizations annotation) {
+        return annotation == null ? Map.of() : annotationValues(annotation.value());
+    }
+
+    private static String defaultMemberPermissions(DefaultMemberPermissions annotation) {
+        return annotation == null ? null : Long.toUnsignedString(annotation.value());
+    }
+
+    private static Boolean annotationValue(DmPermission annotation) {
+        return annotation == null ? null : annotation.value();
+    }
+
+    private static Boolean annotationValue(Nsfw annotation) {
+        return annotation == null ? null : annotation.value();
+    }
+
+    private static List<CommandContextType> annotationValues(CommandContexts annotation) {
+        if (annotation == null || annotation.value().length == 0) {
+            return List.of();
+        }
+        return Arrays.stream(annotation.value()).distinct().toList();
+    }
+
     private static CooldownSpec cooldown(Cooldown annotation) {
         return annotation == null ? null : new CooldownSpec(annotation.amount(), annotation.seconds(), annotation.bucket().trim().toLowerCase(Locale.ROOT));
     }
@@ -187,7 +232,13 @@ public final class CommandParser {
                 annotationValues(type.getAnnotation(RequireBotPermissions.class)),
                 cooldown(type.getAnnotation(Cooldown.class)),
                 List.copyOf(handlers),
-                List.copyOf(autocompleteHandlers)
+                List.copyOf(autocompleteHandlers),
+                defaultMemberPermissions(type.getAnnotation(DefaultMemberPermissions.class)),
+                annotationValue(type.getAnnotation(DmPermission.class)),
+                annotationValue(type.getAnnotation(Nsfw.class)),
+                annotationValues(type.getAnnotation(NameLocalizations.class)),
+                annotationValues(type.getAnnotation(DescriptionLocalizations.class)),
+                annotationValues(type.getAnnotation(CommandContexts.class))
         );
     }
 

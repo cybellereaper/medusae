@@ -1,6 +1,7 @@
 package com.github.cybellereaper.medusae.commands.core.model;
 
 import java.util.List;
+import java.util.Map;
 
 public record CommandDefinition(
         String name,
@@ -14,6 +15,12 @@ public record CommandDefinition(
         List<String> requiredBotPermissions,
         CooldownSpec cooldown,
         List<CommandHandler> handlers,
-        List<AutocompleteHandler> autocompleteHandlers
+        List<AutocompleteHandler> autocompleteHandlers,
+        String defaultMemberPermissions,
+        Boolean dmPermission,
+        Boolean nsfw,
+        Map<String, String> nameLocalizations,
+        Map<String, String> descriptionLocalizations,
+        List<CommandContextType> contexts
 ) {
 }
