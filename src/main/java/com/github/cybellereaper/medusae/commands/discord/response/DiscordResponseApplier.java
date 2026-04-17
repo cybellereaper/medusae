@@ -3,10 +3,7 @@ package com.github.cybellereaper.medusae.commands.discord.response;
 import com.github.cybellereaper.medusae.client.*;
 import com.github.cybellereaper.medusae.commands.core.execute.CommandResponder;
 import com.github.cybellereaper.medusae.commands.core.response.*;
-import com.github.cybellereaper.medusae.commands.core.response.component.ActionRowSpec;
-import com.github.cybellereaper.medusae.commands.core.response.component.ButtonSpec;
-import com.github.cybellereaper.medusae.commands.core.response.component.ComponentSpec;
-import com.github.cybellereaper.medusae.commands.core.response.component.StringSelectSpec;
+import com.github.cybellereaper.medusae.commands.core.response.component.*;
 import com.github.cybellereaper.medusae.commands.core.response.embed.EmbedSpec;
 
 import java.util.List;
@@ -44,6 +41,14 @@ public final class DiscordResponseApplier implements CommandResponder {
             case StringSelectSpec select -> new DiscordStringSelectMenu(select.customId(), select.options().stream()
                     .map(option -> new DiscordSelectOption(option.label(), option.value(), option.description(), option.defaultSelected()))
                     .toList(), select.placeholder(), select.minValues(), select.maxValues(), select.disabled());
+            case UserSelectSpec select -> new DiscordUserSelectMenu(select.customId(), select.placeholder(),
+                    select.minValues(), select.maxValues(), select.disabled());
+            case RoleSelectSpec select -> new DiscordRoleSelectMenu(select.customId(), select.placeholder(),
+                    select.minValues(), select.maxValues(), select.disabled());
+            case MentionableSelectSpec select -> new DiscordMentionableSelectMenu(select.customId(), select.placeholder(),
+                    select.minValues(), select.maxValues(), select.disabled());
+            case ChannelSelectSpec select -> new DiscordChannelSelectMenu(select.customId(), select.placeholder(),
+                    select.minValues(), select.maxValues(), select.disabled(), select.channelTypes());
         };
     }
 

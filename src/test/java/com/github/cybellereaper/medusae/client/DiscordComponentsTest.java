@@ -46,6 +46,31 @@ class DiscordComponentsTest {
     }
 
     @Test
+    void entitySelectMenusSerializeExpectedDiscordTypes() {
+        DiscordActionRow selectRow = DiscordActionRow.of(List.of(
+                DiscordUserSelectMenu.of("assignee").withPlaceholder("Choose user").withSelectionRange(1, 1),
+                DiscordRoleSelectMenu.of("roles").withSelectionRange(0, 3),
+                DiscordMentionableSelectMenu.of("mentions").disable(),
+                DiscordChannelSelectMenu.of("channels").withChannelTypes(List.of(0, 2)).withSelectionRange(1, 2)
+        ));
+
+        Map<String, Object> payload = DiscordMessage.ofContent("Assign")
+                .withComponents(List.of(selectRow))
+                .toPayload();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) payload.get("components");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> components = (List<Map<String, Object>>) rows.get(0).get("components");
+
+        assertEquals(5, components.get(0).get("type"));
+        assertEquals(6, components.get(1).get("type"));
+        assertEquals(7, components.get(2).get("type"));
+        assertEquals(8, components.get(3).get("type"));
+        assertEquals(List.of(0, 2), components.get(3).get("channel_types"));
+    }
+
+    @Test
     void modalPayloadIncludesTextInputs() {
         DiscordModal modal = DiscordModal.of(
                 "feedback_modal",

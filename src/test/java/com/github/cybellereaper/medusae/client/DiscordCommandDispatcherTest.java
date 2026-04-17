@@ -1,11 +1,10 @@
 package com.github.cybellereaper.medusae.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.cybellereaper.medusae.commands.core.annotation.Command;
-import com.github.cybellereaper.medusae.commands.core.annotation.Execute;
-import com.github.cybellereaper.medusae.commands.core.annotation.ButtonHandler;
+import com.github.cybellereaper.medusae.commands.core.annotation.*;
 import com.github.cybellereaper.medusae.commands.core.execute.CommandFramework;
 import com.github.cybellereaper.medusae.commands.core.interaction.context.ComponentContext;
+import com.github.cybellereaper.medusae.commands.core.interaction.context.SelectContext;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
 import com.github.cybellereaper.medusae.commands.discord.adapter.DiscordCommandDispatcher;
 import org.junit.jupiter.api.Test;
@@ -66,6 +65,18 @@ class DiscordCommandDispatcherTest {
         assertEquals("Handled confirm button", data.get().get("content"));
     }
 
+    @Test
+    void dispatchesEntitySelectComponentsByDiscordComponentType() throws Exception {
+        CommandFramework framework = new CommandFramework();
+        framework.registerModules(new SelectComponentModule());
+        DiscordCommandDispatcher dispatcher = new DiscordCommandDispatcher(framework);
+
+        assertComponentDispatch(dispatcher, 5, "user_select", "Handled user_select");
+        assertComponentDispatch(dispatcher, 6, "role_select", "Handled role_select");
+        assertComponentDispatch(dispatcher, 7, "mention_select", "Handled mention_select");
+        assertComponentDispatch(dispatcher, 8, "channel_select", "Handled channel_select");
+    }
+
     @Command("silent")
     static final class SilentCommand {
         @Execute
@@ -81,6 +92,48 @@ class DiscordCommandDispatcherTest {
                     .content("Handled confirm button")
                     .build();
         }
+    }
+
+    static final class SelectComponentModule {
+        @UserSelectHandler("user_select")
+        InteractionReply user(SelectContext ignored) {
+            return InteractionReply.updateMessage().content("Handled user_select").build();
+        }
+
+        @RoleSelectHandler("role_select")
+        InteractionReply role(SelectContext ignored) {
+            return InteractionReply.updateMessage().content("Handled role_select").build();
+        }
+
+        @MentionableSelectHandler("mention_select")
+        InteractionReply mention(SelectContext ignored) {
+            return InteractionReply.updateMessage().content("Handled mention_select").build();
+        }
+
+        @ChannelSelectHandler("channel_select")
+        InteractionReply channel(SelectContext ignored) {
+            return InteractionReply.updateMessage().content("Handled channel_select").build();
+        }
+    }
+
+
+    private static void assertComponentDispatch(DiscordCommandDispatcher dispatcher, int componentType, String customId, String expectedContent) throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> data = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
+
+        var interaction = componentInteractionJson(componentType, customId);
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, payload) -> {
+            calls.incrementAndGet();
+            responseType.set(type);
+            data.set(payload);
+        });
+
+        dispatcher.dispatchComponent(interaction, context);
+
+        assertEquals(1, calls.get());
+        assertEquals(4, responseType.get());
+        assertEquals(expectedContent, data.get().get("content"));
     }
 
     private static com.fasterxml.jackson.databind.JsonNode interactionJson() throws Exception {
@@ -99,16 +152,20 @@ class DiscordCommandDispatcherTest {
     }
 
     private static com.fasterxml.jackson.databind.JsonNode componentInteractionJson() throws Exception {
+        return componentInteractionJson(2, "confirm_button");
+    }
+
+    private static com.fasterxml.jackson.databind.JsonNode componentInteractionJson(int componentType, String customId) throws Exception {
         return MAPPER.readTree("""
                 {
                   "id": "124",
                   "token": "component-token",
                   "type": 3,
                   "data": {
-                    "custom_id": "confirm_button",
-                    "component_type": 2
+                    "custom_id": "%s",
+                    "component_type": %d
                   }
                 }
-                """);
+                """.formatted(customId, componentType));
     }
 }

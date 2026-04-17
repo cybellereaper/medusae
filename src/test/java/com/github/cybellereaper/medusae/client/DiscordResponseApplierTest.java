@@ -4,9 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.commands.core.response.FollowupResponse;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
 import com.github.cybellereaper.medusae.commands.core.response.ModalReply;
-import com.github.cybellereaper.medusae.commands.core.response.component.ActionRowSpec;
-import com.github.cybellereaper.medusae.commands.core.response.component.ButtonSpec;
-import com.github.cybellereaper.medusae.commands.core.response.component.StringSelectSpec;
+import com.github.cybellereaper.medusae.commands.core.response.component.*;
 import com.github.cybellereaper.medusae.commands.discord.response.DiscordResponseApplier;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +48,35 @@ class DiscordResponseApplierTest {
         assertNotNull(responder.data);
         assertEquals("Updated", responder.data.get("content"));
         assertTrue(responder.data.containsKey("components"));
+    }
+
+    @Test
+    void mapsAllSelectSpecsToDiscordSelectPayloads() {
+        CapturingResponder responder = new CapturingResponder();
+        InteractionContext context = context(responder);
+        InteractionReply response = InteractionReply.updateMessage()
+                .content("Select")
+                .components(List.of(ActionRowSpec.of(
+                        UserSelectSpec.of("user_pick").withRange(1, 1),
+                        RoleSelectSpec.of("role_pick").withRange(0, 2),
+                        MentionableSelectSpec.of("mention_pick"),
+                        ChannelSelectSpec.of("channel_pick").withChannelTypes(List.of(0, 2))
+                )))
+                .build();
+
+        new DiscordResponseApplier(context).accept(response);
+
+        assertEquals(4, responder.type);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) responder.data.get("components");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> components = (List<Map<String, Object>>) rows.get(0).get("components");
+
+        assertEquals(5, components.get(0).get("type"));
+        assertEquals(6, components.get(1).get("type"));
+        assertEquals(7, components.get(2).get("type"));
+        assertEquals(8, components.get(3).get("type"));
+        assertEquals(List.of(0, 2), components.get(3).get("channel_types"));
     }
 
     @Test

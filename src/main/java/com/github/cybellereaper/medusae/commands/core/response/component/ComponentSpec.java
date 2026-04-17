@@ -1,4 +1,5 @@
 package com.github.cybellereaper.medusae.commands.core.response.component;
 
-public sealed interface ComponentSpec permits ButtonSpec, StringSelectSpec {
+public sealed interface ComponentSpec permits ButtonSpec, StringSelectSpec, UserSelectSpec, RoleSelectSpec,
+        MentionableSelectSpec, ChannelSelectSpec {
 }
