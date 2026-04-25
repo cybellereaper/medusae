@@ -20,7 +20,7 @@ Add to your shard:
 ```yaml
 dependencies:
   medusae:
-    github: cybellereaper/medusae-java
+    github: cybellereaper/medusae.cr
 ```
 
 ## Development
