@@ -161,41 +161,28 @@ module Medusae
       private def handle_application_command(interaction : JSON::Any) : Nil
         command_code = interaction.dig?("data", "type").try(&.as_i?) || 1
         command_type = CommandType.from_code(command_code)
-
-        handlers = case command_type
-                   when .user_context?    then @user_context_handlers
-                   when .message_context? then @message_context_handlers
-                   else                        @slash_handlers
-                   end
-
-        dispatch_by_data_field(interaction, handlers, "name")
+        dispatch_by_data_field(interaction, handlers_for(command_type), "name")
       end
 
       private def dispatch_by_data_field(
         interaction : JSON::Any,
         handlers : Hash(String, ContextHandler),
         data_field : String,
-        global_handlers : Array(ContextHandler) = [] of ContextHandler
+        global_handlers : Array(ContextHandler) = [] of ContextHandler,
       ) : Nil
-        handler_key = interaction.dig?("data", data_field).try(&.as_s?)
-        context = interaction
-
-        if handler_key
-          normalized_key = handler_key.strip
-          if handler = handlers[normalized_key]?
-            handler.call(context)
-            return
-          end
+        if handler = handler_for(interaction, handlers, data_field)
+          handler.call(interaction)
+          return
         end
 
-        global_handlers.each { |handler| handler.call(context) }
+        global_handlers.each { |handler| handler.call(interaction) }
       end
 
       private def respond(interaction : JSON::Any, response_type : ResponseType, data : Hash(String, JSON::Any)?) : Nil
-        interaction_id = interaction["id"]?.try(&.as_s?) || ""
-        interaction_token = interaction["token"]?.try(&.as_s?) || ""
+        interaction_id = non_blank_string(interaction, "id")
+        interaction_token = non_blank_string(interaction, "token")
 
-        if interaction_id.strip.empty? || interaction_token.strip.empty?
+        if interaction_id.nil? || interaction_token.nil?
           raise ArgumentError.new("interaction must include id and token")
         end
 
@@ -204,6 +191,33 @@ module Medusae
 
       private def int_field(interaction : JSON::Any, field : String) : Int32
         interaction[field]?.try(&.as_i?) || 0
+      end
+
+      private def handlers_for(command_type : CommandType) : Hash(String, ContextHandler)
+        case command_type
+        when .user_context?    then @user_context_handlers
+        when .message_context? then @message_context_handlers
+        else                        @slash_handlers
+        end
+      end
+
+      private def handler_for(
+        interaction : JSON::Any,
+        handlers : Hash(String, ContextHandler),
+        data_field : String,
+      ) : ContextHandler?
+        key = interaction.dig?("data", data_field).try(&.as_s?)
+        return nil unless key
+
+        handlers[key.strip]?
+      end
+
+      private def non_blank_string(interaction : JSON::Any, field : String) : String?
+        value = interaction[field]?.try(&.as_s?)
+        return nil unless value
+
+        return nil if value.strip.empty?
+        value
       end
 
       private def json_hash(named_values : Hash(String, JSON::Any)) : Hash(String, JSON::Any)

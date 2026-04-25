@@ -17,7 +17,7 @@ describe Medusae::Client::SlashCommandRouter do
 
   it "dispatches slash handlers by command name" do
     called = false
-    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) {})
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
     router.register_slash_handler("ping") { called = true }
 
     interaction = JSON.parse(%({"id":"1","token":"abc","type":2,"data":{"name":"ping"}}))
@@ -26,9 +26,42 @@ describe Medusae::Client::SlashCommandRouter do
     called.should be_true
   end
 
+  it "dispatches user context handlers by command name" do
+    called = false
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
+    router.register_user_context_menu_handler("profile") { called = true }
+
+    interaction = JSON.parse(%({"id":"1","token":"abc","type":2,"data":{"type":2,"name":"profile"}}))
+    router.handle_interaction(interaction)
+
+    called.should be_true
+  end
+
+  it "dispatches message context handlers by command name" do
+    called = false
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
+    router.register_message_context_menu_handler("quote") { called = true }
+
+    interaction = JSON.parse(%({"id":"1","token":"abc","type":2,"data":{"type":3,"name":"quote"}}))
+    router.handle_interaction(interaction)
+
+    called.should be_true
+  end
+
+  it "dispatches handlers for keys with leading or trailing whitespace" do
+    called = false
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
+    router.register_component_handler("confirm") { called = true }
+
+    interaction = JSON.parse(%({"id":"1","token":"abc","type":3,"data":{"custom_id":"  confirm  "}}))
+    router.handle_interaction(interaction)
+
+    called.should be_true
+  end
+
   it "runs global component handler when key-specific handler is absent" do
     called = false
-    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) {})
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
     router.register_global_component_handler { called = true }
 
     interaction = JSON.parse(%({"id":"1","token":"abc","type":3,"data":{"custom_id":"unknown"}}))
@@ -38,7 +71,7 @@ describe Medusae::Client::SlashCommandRouter do
   end
 
   it "rejects duplicate handlers" do
-    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) {})
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
     router.register_component_handler("my-button") { }
 
     expect_raises(ArgumentError, /already registered/) do
@@ -47,7 +80,7 @@ describe Medusae::Client::SlashCommandRouter do
   end
 
   it "requires interaction id and token when responding" do
-    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) {})
+    router = Medusae::Client::SlashCommandRouter.new(->(_id : String, _token : String, _type : Int32, _data : Hash(String, JSON::Any)?) { })
     interaction = JSON.parse(%({"type":1}))
 
     expect_raises(ArgumentError, /id and token/) do
